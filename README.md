@@ -34,7 +34,10 @@ soma-solver/
 │       ├── renderer.js      # Three.js rendering logic
 │       ├── uiController.js  # UI event handling and API calls
 │       └── utils.js         # Frontend utility functions
-└── requirements.txt         # Python dependencies
+├── node_modules/            # Node.js dependencies (Three.js)
+├── package.json            # Node.js project configuration
+├── package-lock.json       # Node.js dependency lock file
+└── requirements.txt        # Python dependencies
 ```
 
 ## Setup & Installation
@@ -42,7 +45,7 @@ soma-solver/
 ### Prerequisites
 
 - Python 3.6+ (Python 3.10+ recommended)
-- Node.js (optional, for development)
+- Node.js 14+ and npm (for Three.js dependencies)
 - Git
 
 ### Installation
@@ -53,14 +56,20 @@ soma-solver/
    cd soma-solver
    ```
 
-2. Compile the Yass solver using the included makefile:
+2. Install Node.js dependencies:
+   ```
+   npm install
+   ```
+   This will install Three.js and other required frontend dependencies.
+
+3. Compile the Yass solver using the included makefile:
    ```
    cd backend/yass
    make
    cd ../..
    ```
 
-3. Play around with yass using different inputs and flags
+4. Play around with yass using different inputs and flags
    ```
    ./soma -h
    ./soma -a figures/cube.soma
@@ -89,6 +98,19 @@ soma-solver/
    ```
    http://localhost:5000
    ```
+
+## Development Notes
+
+### Frontend Dependencies
+The application uses Three.js for 3D rendering. The dependencies are managed through npm:
+- Three.js is installed locally to ensure consistent versioning and faster loading
+- The `node_modules` directory is git-ignored but the `package.json` and `package-lock.json` files are tracked
+- When cloning the repository, run `npm install` to install all required dependencies
+
+### Performance Optimization
+- Three.js is served locally instead of from CDN for better performance
+- The application includes loading indicators to provide feedback during initialization
+- Dependencies are verified before the application starts
 
 ## Current Status
 

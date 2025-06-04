@@ -1,0 +1,24 @@
+{
+  "name": "soma-cube",
+  "version": "1.0.0",
+  "description": "A modern web-based application for visualizing, creating, and solving SOMA cube puzzles, integrating a 3D GUI with the YASS text-based solver.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/macarreg/SomaCube.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/macarreg/SomaCube/issues"
+  },
+  "homepage": "https://github.com/macarreg/SomaCube#readme",
+  "dependencies": {
+    "three": "^0.152.0"
+  }
+}

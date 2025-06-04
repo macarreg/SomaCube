@@ -15,6 +15,10 @@ CORS(app)
 def serve_index():
     return send_from_directory(app.static_folder, 'index.html')
 
+@app.route('/node_modules/<path:filename>')
+def serve_node_modules(filename):
+    return send_from_directory('../node_modules', filename)
+
 @app.route('/api/shapes')
 def get_shapes():
     try:
