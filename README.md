@@ -133,3 +133,7 @@ We plan to enhance the application with the following features:
 ## Credits
 
 - [Yass SOMA Cube Solver](https://github.com/thanks4opensource/yass) - The backend solver engine used in this project. Developed by Mark R. Rubin
+
+This project integrates the Yass SOMA Cube Solver by Mark R. Rubin, which is licensed under the GNU General Public License v3.0.
+
+According to the license terms: This project, being a derivative work of a GPL-3.0 project, is also licensed under the GNU General Public License v3.0. You may copy, distribute, and modify this project under the terms of that license. A full copy of the license is included in the LICENSE file.
