@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>SOMA Cube Solver</title>
+        <!-- Three.js dependencies -->
+        <script async src="https://unpkg.com/es-module-shims@1.8.0/dist/es-module-shims.js"></script>
+        <script type="importmap">
+            { 
+                "imports": {
+                    "three": "https://unpkg.com/three@0.152.0/build/three.module.js",
+                    "three/addons/": "https://unpkg.com/three@0.152.0/examples/jsm/",
+                    "three/addons/controls/OrbitControls.js": "https://unpkg.com/three@0.152.0/examples/jsm/controls/OrbitControls.js"
+                }
+            }
+        </script>
+        <link rel="stylesheet" href="style.css">
+        <script type="module" src="js/main.js"></script>
+    </head>
+    <body>
+        <h2>SOMA Cube Solver</h2>
+        <div class="controls" style="visibility: hidden;">
+            <div id="shape-selector" class="shape-selector"></div>
+            <div class="button-group">
+                <button id="check-solution">Check Solution</button>
+                <button id="reset-grid">Reset Grid</button>
+                <button id="remove-selected">Remove Selected</button>
+            </div>
+        </div>
+        <div id="solution-counter">
+            <span>Solutions Found: </span>
+            <span id="solution-count">0</span>
+            <span>/</span>
+            <span id="total-solutions">0</span>
+        </div>
+        <div id="instructions">
+            <h3>Controls:</h3>
+            <p>Arrow Keys: Move piece in X/Y plane</p>
+            <p>Z/X: Move piece in/out (Z axis)</p>
+            <p>R: Rotate around X axis</p>
+            <p>F: Rotate around Y axis</p>
+            <p>V: Rotate around Z axis</p>
+            <p>Delete: Remove selected piece</p>
+        </div>
+        <div id="container"></div>
+        <div id="pieces-panel">
+            <h3>Available Pieces</h3>
+            <div id="pieces-container"></div>
+        </div>
+        <div id="message"></div>
+    </body>
+</html>
