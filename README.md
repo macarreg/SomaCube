@@ -52,7 +52,7 @@ soma-solver/
 
 1. Clone this repository:
    ```
-   git clone https://github.com/BlakeMasters/Soma-Cube-Project.git
+   git clone https://github.com/macarreg/SomaCube.git
    cd soma-solver
    ```
 
@@ -77,7 +77,7 @@ soma-solver/
 
 ### Running the Application
 
-1. Setup a virtual environment
+1. Setup a virtual environment (or just get Conda)
    ```
    python3 -m venv venv
    source venv/bin/activate
@@ -121,9 +121,8 @@ This application is currently in development with basic functionality implemente
 
 ## Future Plans
 
-We plan to enhance the application with the following features:
+I plan to enhance the application with the following features:
 
-- Implementing GUIs for varying solutions and pieces (pyramid, scorpion, 2x2x2)
 - Hint function will display next viable piece on the grid
 - User accounts to save puzzle progress
 - Library of classic SOMA cube challenges
