@@ -23,6 +23,9 @@
 
 #include <algorithm>  // DEBUG (if sorting in center())
 #include <cstdint>
+#include <array>
+#include <iostream>
+#include <limits>
 
 
 #if SOMA_MATRIX_ROTATION + SOMA_LAMBDA_ROTATION != 1
