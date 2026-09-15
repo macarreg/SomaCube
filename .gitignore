@@ -20,5 +20,6 @@ package-lock.json
 .DS_Store
 Thumbs.db
 
-# solutions file
-backend/solutions.json
+# solution and object files
+backend/solutions/
+*.o

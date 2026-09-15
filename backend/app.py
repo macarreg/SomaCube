@@ -5,6 +5,7 @@ import logging
 import subprocess
 from soma_grid import SomaGrid
 from utils import handle_solution, load_solutions, normalize_solution, VALID_PIECES
+from hint_solver import compute_hint, get_next_hint_piece
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
@@ -46,14 +47,20 @@ def get_soma_file(filename):
 @app.route('/api/check-solution', methods=['POST'])
 def check_solution():
     try:
-        data = request.json
-        if not data or 'grid_state' not in data or 'shape_id' not in data:
+        data = request.json or {}
+        grid_state = data.get('grid_state')
+        shape_id = data.get('shape_id')
+        save_if_new = data.get('save', True)  # Allow caller to specify save behavior
+
+        if not grid_state or not shape_id:
             return jsonify({"error": "Missing grid state or shape ID"}), 400
             
-        grid_state = data['grid_state']
-        shape_id = data['shape_id']
+        is_valid, is_new, normalized, solution_count = handle_solution(
+            shape_id, 
+            grid_state, 
+            check_only=not save_if_new
+        )
         
-        is_valid, is_new, normalized, solution_count = handle_solution(shape_id, grid_state)
         if not is_valid:
             return jsonify({
                 "valid": False,
@@ -70,13 +77,43 @@ def check_solution():
         logger.error(f"Error checking solution: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
-@app.route('/api/solutions/<shape_id>')
-def get_solutions(shape_id):
+@app.route('/api/solutions/<shape_id>', methods=['GET'])
+def get_shape_solutions(shape_id):
+    solutions = load_solutions(shape_id)
+    return jsonify({
+        "shape_id": shape_id,
+        "solution_count": len(solutions)
+    })
+
+@app.route('/api/hint', methods=['POST'])
+def get_hint():
     try:
-        solutions = load_solutions(shape_id)
-        return jsonify(list(solutions))
+        data = request.json
+        if not data or 'grid_state' not in data or 'shape_id' not in data:
+            return jsonify({"error": "Missing grid state or shape ID"}), 400
+
+        grid_state = data['grid_state']
+        shape_id = data['shape_id']
+        cached_solution = data.get('cached_solution')
+
+        ignored_pieces = set(data.get('ignored_pieces', []))
+
+        if cached_solution:
+            hint = get_next_hint_piece(grid_state, cached_solution, ignored_pieces)
+            if hint is not None:
+                return jsonify({
+                    "success": True,
+                    "message": f"Hint: place the {hint['piece_id']} piece.",
+                    "hint": hint,
+                    "full_solution": cached_solution,
+                    "from_cache": True,
+                })
+
+        result = compute_hint(grid_state, shape_id)
+        return jsonify(result)
+
     except Exception as e:
-        logger.error(f"Error getting solutions for {shape_id}: {str(e)}")
+        logger.error(f"Error computing hint: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/total-solutions/<shape_id>')
@@ -85,7 +122,7 @@ def get_total_solutions(shape_id):
         soma_path = os.path.join(os.path.dirname(__file__), 'yass', 'figures', f"{shape_id}.soma")
         soma_executable = os.path.join(os.path.dirname(__file__), 'yass', 'soma')
         
-        result = subprocess.run([soma_executable, '-cq', soma_path], 
+        result = subprocess.run([soma_executable, '-acr', soma_path], 
                               capture_output=True, 
                               text=True,
                               cwd=os.path.join(os.path.dirname(__file__), 'yass'))

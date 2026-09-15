@@ -6,6 +6,7 @@ export class UIController {
         this.pieceManager = pieceManager;
         this.gridManager = gridManager;
         this.currentShapeId = 'cube';
+        this.cachedHintSolution = null;
         this.initializeUI();
     }
 
@@ -27,23 +28,37 @@ export class UIController {
         }
     }
 
-    showMessage(message, duration = 2000) {
+    showMessage(message, duration = 3000) {
         const messageDiv = document.getElementById('message');
-        if (messageDiv) {
-            messageDiv.textContent = message;
-            messageDiv.style.display = 'block';
-            if (duration > 0) {
-                setTimeout(() => messageDiv.style.display = 'none', duration);
-            }
+        if (!messageDiv) return;
+    
+        // 1. Cancel any pending timer so an old message can't hide this new one
+        if (this.messageTimeout) {
+            clearTimeout(this.messageTimeout);
+            this.messageTimeout = null;
+        }
+    
+        messageDiv.textContent = message;
+        messageDiv.style.display = 'block';
+    
+        // 2. Set the fresh timer
+        if (duration > 0) {
+            this.messageTimeout = setTimeout(() => {
+                messageDiv.style.display = 'none';
+                messageDiv.textContent = '';
+                this.messageTimeout = null;
+            }, duration);
         }
     }
 
     initializeEventListeners() {
         const checkButton = document.getElementById('check-solution');
+        const hintButton = document.getElementById('hint');
         const resetButton = document.getElementById('reset-grid');
         const removeButton = document.getElementById('remove-selected');
         
         if (checkButton) checkButton.addEventListener('click', () => this.checkSolution());
+        if (hintButton) hintButton.addEventListener('click', () => this.requestHint());
         if (resetButton) resetButton.addEventListener('click', () => this.resetGrid());
         if (removeButton) removeButton.addEventListener('click', () => this.pieceManager.removeSelectedPiece());
         window.addEventListener('keydown', (event) => this.handleKeyDown(event));
@@ -115,8 +130,153 @@ export class UIController {
         }
     }
 
+    clearHintCache() {
+        this.cachedHintSolution = null;
+    }
+
+    isCompatibleWithCachedSolution(gridState) {
+        if (!this.cachedHintSolution) return false;
+
+        const currentPlacements = this.extractPlacementsFromGridState(gridState);
+        const solutionPlacements = this.extractPlacementsFromYass(this.cachedHintSolution);
+
+        for (const [pieceId, cells] of Object.entries(currentPlacements)) {
+            if (!(pieceId in solutionPlacements)) return false;
+            const solutionSet = new Set(solutionPlacements[pieceId]);
+            if (cells.size !== solutionSet.size || ![...cells].every(c => solutionSet.has(c))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    extractPlacementsFromGridState(gridState) {
+        const dimensions = this.gridManager.getDimensions();
+        const placements = {};
+
+        for (let x = 0; x < dimensions.width; x++) {
+            for (let y = 0; y < dimensions.height; y++) {
+                for (let z = 0; z < dimensions.depth; z++) {
+                    const pieceId = gridState[x][y][z];
+                    if (pieceId && VALID_PIECES.has(pieceId)) {
+                        const key = `${x},${y},${z}`;
+                        if (!placements[pieceId]) placements[pieceId] = new Set();
+                        placements[pieceId].add(key);
+                    }
+                }
+            }
+        }
+        return placements;
+    }
+
+    extractPlacementsFromYass(yassFormat) {
+        const placements = {};
+        const layers = yassFormat.trim().split('\n\n');
+
+        layers.forEach((layer, z) => {
+            layer.trim().split('\n').forEach((row, y) => {
+                [...row].forEach((cell, x) => {
+                    if (VALID_PIECES.has(cell)) {
+                        const key = `${x},${y},${z}`;
+                        if (!placements[cell]) placements[cell] = new Set();
+                        placements[cell].add(key);
+                    }
+                });
+            });
+        });
+        return placements;
+    }
+
+    getNextHintFromCache(gridState) {
+        if (!this.cachedHintSolution) return null;
+
+        const currentPlacements = this.extractPlacementsFromGridState(gridState);
+        const solutionPlacements = this.extractPlacementsFromYass(this.cachedHintSolution);
+
+        for (const pieceId of SOMA_PIECES.map(p => p.id)) {
+            if (!currentPlacements[pieceId] && solutionPlacements[pieceId]) {
+                const cells = [...solutionPlacements[pieceId]].map(key => key.split(',').map(Number));
+                return { piece_id: pieceId, cells };
+            }
+        }
+        return null;
+    }
+
+    applyHintResult(data) {
+        if (data.removed_pieces?.length) {
+            this.pieceManager.removePiecesById(data.removed_pieces);
+        }
+
+        const applied = this.pieceManager.applyHint(
+            data.hint.piece_id,
+            data.hint.cells,
+            this.gridManager.getDimensions()
+        );
+
+        if (!applied) {
+            this.showMessage('Found a solution but could not place the hinted piece.');
+            return false;
+        }
+
+        this.cachedHintSolution = data.full_solution;
+        this.showMessage(data.message);
+        return true;
+    }
+
+    async requestHint() {
+        const gridState = this.scanGridState();
+        const yassFormat = this.convertToYassFormat(gridState);
+
+        if (this.cachedHintSolution && this.isCompatibleWithCachedSolution(gridState)) {
+            const cachedHint = this.getNextHintFromCache(gridState);
+            if (cachedHint) {
+                this.applyHintResult({
+                    hint: cachedHint,
+                    full_solution: this.cachedHintSolution,
+                    removed_pieces: [],
+                    message: `Hint: place the ${cachedHint.piece_id} piece.`,
+                });
+                return;
+            }
+            // Every piece from the cached solution is now placed. Rather than
+            // dead-ending here, clear the cache and fall through to ask the
+            // backend for a fresh, unique solution (existing solution DB is
+            // responsible for rejecting ones already known) so repeated Hint
+            // presses keep working through all unique solutions.
+            this.clearHintCache();
+        } else {
+            this.clearHintCache();
+        }
+
+        try {
+            this.showMessage('Finding hint...', 0);
+            const response = await fetch('/api/hint', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    grid_state: yassFormat,
+                    shape_id: this.currentShapeId
+                })
+            });
+
+            if (!response.ok) throw new Error('Failed to get hint');
+
+            const data = await response.json();
+            if (!data.success || !data.hint) {
+                this.showMessage(data.message || 'No hint available.');
+                return;
+            }
+
+            this.applyHintResult(data);
+        } catch (error) {
+            console.error('Error getting hint:', error);
+            this.showMessage('Failed to get hint. Please try again.');
+        }
+    }
+
     async resetGrid() {
         try {
+            this.clearHintCache();
             this.pieceManager.updatePiecesPanel();
             const success = await this.gridManager.loadGrid(this.currentShapeId);
             
@@ -160,8 +320,8 @@ export class UIController {
     async fetchCurrentSolutionCount() {
         const response = await fetch(`/api/solutions/${this.currentShapeId}`);
         if (!response.ok) return 0;
-        const solutions = await response.json();
-        return solutions.length;
+        const data = await response.json();
+        return data.solution_count;
     }
 
     async fetchTotalSolutions() {
@@ -252,6 +412,7 @@ export class UIController {
             if (newShapeId !== this.currentShapeId) {
                 try {
                     this.showMessage('Loading figure...');
+                    this.clearHintCache();
                     this.pieceManager.updatePiecesPanel();
                     
                     const success = await this.gridManager.loadGrid(newShapeId);
@@ -274,4 +435,4 @@ export class UIController {
         selectorContainer.appendChild(label);
         selectorContainer.appendChild(select);
     }
-} 
+}

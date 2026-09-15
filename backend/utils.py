@@ -2,6 +2,7 @@ import os
 import logging
 import json
 from typing import Set, Tuple, Optional
+import itertools
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
@@ -12,17 +13,33 @@ VALID_PIECES = {'3', 'l', 't', 'z', 'p', 'n', 'c', '.'}
 VALID_GRID_SPACES = {'*', 'o'}  # Both '*' and 'o' indicate valid grid spaces
 
 def load_solutions(shape_id: str) -> Set[str]:
-    """Load known solutions from the shape-specific solutions file."""
-    solutions_dir = os.path.join(os.path.dirname(__file__), 'solutions')
-    os.makedirs(solutions_dir, exist_ok=True)
-    solutions_file = os.path.join(solutions_dir, f"{shape_id}_solutions.json")
-    
+    solutions_file = os.path.join(os.path.dirname(__file__), 'solutions', f"{shape_id}_solutions.json")
+    if not os.path.exists(solutions_file):
+        return set()
+
     try:
-        if not os.path.exists(solutions_file):
-            return set()
         with open(solutions_file, 'r') as f:
-            solutions = json.load(f)
-            return set(solutions)
+            raw_entries = json.load(f)
+
+        migrated_solutions = set()
+        needs_rewrite = False
+
+        for entry in raw_entries:
+            # If an entry is in the legacy multi-line format, normalize it
+            if '\n' in entry:
+                norm = normalize_solution(entry, shape_id)
+                migrated_solutions.add(norm)
+                needs_rewrite = True
+            else:
+                migrated_solutions.add(entry)
+
+        # Resave if legacy formats were updated
+        if needs_rewrite:
+            with open(solutions_file, 'w') as f:
+                json.dump(list(migrated_solutions), f)
+
+        return migrated_solutions
+
     except Exception as e:
         logger.error(f"Error loading solutions for {shape_id}: {str(e)}")
         return set()
@@ -89,103 +106,39 @@ def is_valid_placement(grid_state: str, shape_id: str) -> bool:
         return False
 
 def normalize_solution(solution: str, shape_id: str) -> str:
-    """Normalize a solution by rotating it to a canonical form."""
+    """
+    Produce a deterministic canonical string.
+    For asymmetric target shapes, strips empty padding while preserving
+    fixed-frame voxel coordinates.
+    """
     try:
-        figures_dir = os.path.join(os.path.dirname(__file__), 'yass', 'figures')
-        shape_file = os.path.join(figures_dir, f"{shape_id}.soma")
-        
-        if not os.path.exists(shape_file):
-            logger.error(f"Shape file not found: {shape_file}")
-            return solution.strip()
-            
-        with open(shape_file, 'r') as f:
-            original_shape = f.read().strip()
-            
-        original_layers = original_shape.split('\n\n')
-        original_height = len(original_layers[0].split('\n'))
-        original_width = len(original_layers[0].split('\n')[0])
-        original_depth = len(original_layers)
-        
-        # Convert solution to 3D array
         layers = solution.strip().split('\n\n')
-        grid = [[list(row) for row in layer.split('\n')] for layer in layers]
-        height = len(grid[0])
-        width = len(grid[0][0])
-        depth = len(grid)
         
-        def get_piece_positions(grid):
-            """Get the positions of all pieces in the grid."""
-            positions = []
-            for z in range(depth):
-                for y in range(height):
-                    for x in range(width):
-                        if grid[z][y][x] != '.':
-                            positions.append((x, y, z, grid[z][y][x]))
-            return positions
+        # Parse into sorted coordinate tuples: (z, y, x, piece_char)
+        positions = [
+            (z, y, x, char)
+            for z, layer in enumerate(layers)
+            for y, row in enumerate(layer.split('\n'))
+            for x, char in enumerate(row)
+            if char != '.'
+        ]
         
-        def rotate_positions(positions, axis):
-            """Rotate piece positions around the given axis."""
-            rotated = []
-            for x, y, z, piece in positions:
-                if axis == 'x':
-                    new_x, new_y, new_z = x, -z, y
-                elif axis == 'y':
-                    new_x, new_y, new_z = z, y, -x
-                else:  # z
-                    new_x, new_y, new_z = -y, x, z
-                rotated.append((new_x, new_y, new_z, piece))
-            return rotated
-        
-        def positions_to_grid(positions):
-            """Convert piece positions back to a grid."""
-            grid = [[['.' for _ in range(width)] for _ in range(height)] for _ in range(depth)]
-            
-            # Find the minimum coordinates to normalize position
-            min_x = min(x for x, _, _, _ in positions)
-            min_y = min(y for _, y, _, _ in positions)
-            min_z = min(z for _, _, z, _ in positions)
-            
-            # Place pieces in grid, normalized to start at (0,0,0)
-            for x, y, z, piece in positions:
-                norm_x = x - min_x
-                norm_y = y - min_y
-                norm_z = z - min_z
-                if 0 <= norm_x < width and 0 <= norm_y < height and 0 <= norm_z < depth:
-                    grid[norm_z][norm_y][norm_x] = piece
-            
-            return grid
-        
-        def grid_to_string(grid):
-            """Convert grid to string format."""
-            layers = []
-            for layer in grid:
-                rows = [''.join(row) for row in layer]
-                layers.append('\n'.join(rows))
-            return '\n\n'.join(layers)
-        
-        positions = get_piece_positions(grid)
-        rotations = set()
-        
-        # Try all possible rotations (4 for each axis)
-        for _ in range(4):  # Z rotations
-            for _ in range(4):  # Y rotations
-                for _ in range(4):  # X rotations
-                    rotated_grid = positions_to_grid(positions)
-                    rotated_str = grid_to_string(rotated_grid)
-                    if is_valid_placement(rotated_str, shape_id):
-                        rotations.add(rotated_str)
-                    positions = rotate_positions(positions, 'x')
-                positions = rotate_positions(positions, 'y')
-            positions = rotate_positions(positions, 'z')
-        
-        if not rotations:
-            logger.error("No valid rotations found for the shape")
+        if not positions:
             return solution.strip()
-            
-        min_solution = min(rotations)
-        logger.debug(f"Found {len(rotations)} unique rotations")
-        return min_solution
-        
+
+        # Shift to base origin (0, 0, 0) preserving fixed orientation
+        min_z = min(z for z, y, x, _ in positions)
+        min_y = min(y for z, y, x, _ in positions)
+        min_x = min(x for z, y, x, _ in positions)
+
+        canonical_positions = sorted(
+            (z - min_z, y - min_y, x - min_x, char)
+            for z, y, x, char in positions
+        )
+
+        # Compact, deterministic string representation
+        return ";".join(f"{z},{y},{x}:{char}" for z, y, x, char in canonical_positions)
+
     except Exception as e:
         logger.error(f"Error normalizing solution: {str(e)}")
         return solution.strip()
