@@ -13,24 +13,53 @@ export class Renderer {
     }
 
     init() {
-        this.scene.background = new THREE.Color(0xf0f0f0);
-        
-        const aspect = window.innerWidth / window.innerHeight;
-        this.camera = new THREE.PerspectiveCamera(75, aspect, 0.1, 1000);
-        this.camera.position.set(5, 5, 5);
-        this.camera.lookAt(0,0,0);
-        
-        this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-        this.renderer.setPixelRatio(window.devicePixelRatio);
-        this.renderer.setSize(window.innerWidth, window.innerHeight);
-        this.renderer.shadowMap.enabled = true;
-        
         const container = document.getElementById('container');
         if (!container) return;
+    
+        this.scene.background = new THREE.Color(0xf0f0f0);
+    
+        const { width, height } = this.getContainerSize();
+    
+        this.camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000);
+        this.camera.position.set(5, 5, 5);
+        this.camera.lookAt(0, 0, 0);
+    
+        this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        this.renderer.setPixelRatio(window.devicePixelRatio);
+        this.renderer.setSize(width, height, false); // false = let CSS size the canvas
+        this.renderer.shadowMap.enabled = true;
+    
         container.appendChild(this.renderer.domElement);
-        
+    
         this.setupLights();
         this.setupControls();
+    
+        this.resizeObserver = new ResizeObserver(() => this.onWindowResize());
+        this.resizeObserver.observe(container);
+    }
+    
+    getContainerSize() {
+        const container = document.getElementById('container');
+        return {
+            width: Math.max(container?.clientWidth || 1, 1),
+            height: Math.max(container?.clientHeight || 1, 1),
+        };
+    }
+    
+    onWindowResize() {
+        if (!this.camera || !this.renderer) return;
+    
+        const { width, height } = this.getContainerSize();
+        this.camera.aspect = width / height;
+        this.camera.updateProjectionMatrix();
+        this.renderer.setSize(width, height, false);
+    }
+    
+    onMouseMove(event) {
+        if (!this.renderer) return;
+        const rect = this.renderer.domElement.getBoundingClientRect();
+        this.mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+        this.mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
     }
 
     setupLights() {
@@ -51,22 +80,6 @@ export class Renderer {
         this.controls.minDistance = 3;
         this.controls.maxDistance = 20;
         this.controls.maxPolarAngle = Math.PI;
-    }
-
-    onWindowResize() {
-        if (!this.camera || !this.renderer) return;
-        
-        const width = window.innerWidth;
-        const height = window.innerHeight;
-        
-        this.camera.aspect = width / height;
-        this.camera.updateProjectionMatrix();
-        this.renderer.setSize(width, height);
-    }
-
-    onMouseMove(event) {
-        this.mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
-        this.mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
     }
 
     animate() {

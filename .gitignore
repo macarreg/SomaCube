@@ -2,10 +2,10 @@
 __pycache__/
 *.py[cod]
 *$py.class
-venv/
+.venv/
 *.so
 .pytest_cache/
-env/
+.env
 *.egg-info
 solutions/
 
@@ -23,3 +23,7 @@ Thumbs.db
 # solution and object files
 backend/solutions/
 *.o
+
+# rate limiting
+flask-limiter
+redis

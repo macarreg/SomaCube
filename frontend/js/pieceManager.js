@@ -10,22 +10,17 @@ export class PieceManager {
     }
 
     initializePiecesPanel() {
-        const panel = document.getElementById('pieces-panel');
-        if (!panel) return;
-
-        const container = document.createElement('div');
-        container.className = 'pieces-container';
-        panel.appendChild(container);
-
+        const container = document.getElementById('pieces-container');
+        if (!container) return;
+    
         SOMA_PIECES.forEach(piece => {
-            const element = this.createPieceElement(piece);
-            container.appendChild(element);
+            container.appendChild(this.createPieceElement(piece));
         });
     }
-
+    
     createPieceElement(piece) {
         const element = document.createElement('div');
-        element.className = 'piece';
+        element.className = 'piece-item';
         element.id = `panel-${piece.id}`;
         element.innerHTML = `
             <div class="piece-preview" style="background-color: ${piece.color}"></div>

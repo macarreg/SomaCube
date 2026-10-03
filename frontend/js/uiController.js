@@ -2,12 +2,18 @@ import { SOMA_PIECES, VALID_PIECES, SHAPE_IDS } from './constants.js';
 import * as THREE from 'three';
 
 export class UIController {
-    constructor(pieceManager, gridManager) {
+    constructor(pieceManager, gridManager, authController) {
         this.pieceManager = pieceManager;
         this.gridManager = gridManager;
+        this.authController = authController || null;
         this.currentShapeId = 'cube';
         this.cachedHintSolution = null;
         this.initializeUI();
+    }
+
+    _authHeaders() {
+        const token = this.authController?.getAccessToken();
+        return token ? { 'Authorization': `Bearer ${token}` } : {};
     }
 
     async initializeUI() {
@@ -87,6 +93,22 @@ export class UIController {
         if (action) action();
     }
 
+    async _apiError(response, fallback) {
+        let body = {};
+        try { body = await response.json(); } catch {}
+        if (response.status === 429) {
+            const wait = response.headers.get('Retry-After');
+            return `Too many requests. Please wait${wait ? ` ${wait}s` : ' a moment'} and try again.`;
+        }
+        if (response.status === 401) return 'Your session expired. Please log in again.';
+        return body.message || body.error || fallback;
+    }
+    
+    async refreshHintsCounter() {   // cheap: avoids re-running the soma subprocess
+        const el = document.getElementById('hints-used-count');
+        if (el) el.textContent = await this.fetchHintsUsed();
+    }
+
     async checkSolution() {
         const gridState = this.scanGridState();
         
@@ -106,14 +128,14 @@ export class UIController {
         try {
             const response = await fetch('/api/check-solution', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', ...this._authHeaders() },
                 body: JSON.stringify({ 
                     grid_state: yassFormat,
                     shape_id: this.currentShapeId
                 })
             });
             
-            if (!response.ok) throw new Error('Failed to check solution');
+            if (!response.ok) { this.showMessage(await this._apiError(response, 'Failed to check solution.')); return false; }
             
             const data = await response.json();
             this.showMessage(data.message);
@@ -132,22 +154,6 @@ export class UIController {
 
     clearHintCache() {
         this.cachedHintSolution = null;
-    }
-
-    isCompatibleWithCachedSolution(gridState) {
-        if (!this.cachedHintSolution) return false;
-
-        const currentPlacements = this.extractPlacementsFromGridState(gridState);
-        const solutionPlacements = this.extractPlacementsFromYass(this.cachedHintSolution);
-
-        for (const [pieceId, cells] of Object.entries(currentPlacements)) {
-            if (!(pieceId in solutionPlacements)) return false;
-            const solutionSet = new Set(solutionPlacements[pieceId]);
-            if (cells.size !== solutionSet.size || ![...cells].every(c => solutionSet.has(c))) {
-                return false;
-            }
-        }
-        return true;
     }
 
     extractPlacementsFromGridState(gridState) {
@@ -187,21 +193,6 @@ export class UIController {
         return placements;
     }
 
-    getNextHintFromCache(gridState) {
-        if (!this.cachedHintSolution) return null;
-
-        const currentPlacements = this.extractPlacementsFromGridState(gridState);
-        const solutionPlacements = this.extractPlacementsFromYass(this.cachedHintSolution);
-
-        for (const pieceId of SOMA_PIECES.map(p => p.id)) {
-            if (!currentPlacements[pieceId] && solutionPlacements[pieceId]) {
-                const cells = [...solutionPlacements[pieceId]].map(key => key.split(',').map(Number));
-                return { piece_id: pieceId, cells };
-            }
-        }
-        return null;
-    }
-
     applyHintResult(data) {
         if (data.removed_pieces?.length) {
             this.pieceManager.removePiecesById(data.removed_pieces);
@@ -223,51 +214,32 @@ export class UIController {
         return true;
     }
 
+
+    setHintsUsed(n) {
+        const el = document.getElementById('hints-used-count');
+        if (el && Number.isInteger(n)) el.textContent = n;
+    }
+    
+
     async requestHint() {
-        const gridState = this.scanGridState();
-        const yassFormat = this.convertToYassFormat(gridState);
-
-        if (this.cachedHintSolution && this.isCompatibleWithCachedSolution(gridState)) {
-            const cachedHint = this.getNextHintFromCache(gridState);
-            if (cachedHint) {
-                this.applyHintResult({
-                    hint: cachedHint,
-                    full_solution: this.cachedHintSolution,
-                    removed_pieces: [],
-                    message: `Hint: place the ${cachedHint.piece_id} piece.`,
-                });
-                return;
-            }
-            // Every piece from the cached solution is now placed. Rather than
-            // dead-ending here, clear the cache and fall through to ask the
-            // backend for a fresh, unique solution (existing solution DB is
-            // responsible for rejecting ones already known) so repeated Hint
-            // presses keep working through all unique solutions.
-            this.clearHintCache();
-        } else {
-            this.clearHintCache();
-        }
-
+        const yassFormat = this.convertToYassFormat(this.scanGridState());
         try {
             this.showMessage('Finding hint...', 0);
             const response = await fetch('/api/hint', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    grid_state: yassFormat,
-                    shape_id: this.currentShapeId
-                })
+                headers: { 'Content-Type': 'application/json', ...this._authHeaders() },
+                body: JSON.stringify({ grid_state: yassFormat, shape_id: this.currentShapeId,
+                                       cached_solution: this.cachedHintSolution }),
             });
-
-            if (!response.ok) throw new Error('Failed to get hint');
-
+            if (!response.ok) { this.showMessage(await this._apiError(response, 'Failed to get hint.')); return; }
             const data = await response.json();
-            if (!data.success || !data.hint) {
-                this.showMessage(data.message || 'No hint available.');
-                return;
+            if (!data.success || !data.hint) { this.showMessage(data.message || 'No hint available.'); return; }
+            if (this.applyHintResult(data)) {
+                this.setHintsUsed(data.hints_used);
+                if (!data.tracked && !this.authController?.getAccessToken()) {
+                    this.showMessage(`${data.message} (Log in to track hints.)`);
+                }
             }
-
-            this.applyHintResult(data);
         } catch (error) {
             console.error('Error getting hint:', error);
             this.showMessage('Failed to get hint. Please try again.');
@@ -292,23 +264,6 @@ export class UIController {
         }
     }
 
-    async updateSolutionCounts() {
-        try {
-            const [currentCount, totalCount] = await Promise.all([
-                this.fetchCurrentSolutionCount(),
-                this.fetchTotalSolutions()
-            ]);
-            
-            this.updateSolutionCountDisplay(currentCount, totalCount);
-            
-            if (currentCount === totalCount && totalCount > 0) {
-                this.showMessage('CONGRATULATIONS! YOU HAVE FOUND EVERY SOLUTION TO THIS PUZZLE!', 0);
-            }
-        } catch (error) {
-            console.error('Error updating solution counts:', error);
-        }
-    }
-
     updateSolutionCountDisplay(currentCount, totalCount) {
         const countElement = document.getElementById('solution-count');
         const totalElement = document.getElementById('total-solutions');
@@ -318,7 +273,7 @@ export class UIController {
     }
 
     async fetchCurrentSolutionCount() {
-        const response = await fetch(`/api/solutions/${this.currentShapeId}`);
+        const response = await fetch(`/api/solutions/${this.currentShapeId}`, { headers: this._authHeaders() });
         if (!response.ok) return 0;
         const data = await response.json();
         return data.solution_count;
@@ -329,6 +284,31 @@ export class UIController {
         if (!response.ok) return 0;
         const data = await response.json();
         return data.total_solutions;
+    }
+
+    async fetchHintsUsed() {
+        const response = await fetch(`/api/stats/${this.currentShapeId}`, { headers: this._authHeaders() });
+        if (!response.ok) return 0;
+        const data = await response.json();
+        return data.hints_used;
+    }
+    
+    async updateSolutionCounts() {
+        try {
+            const [currentCount, totalCount, hintsUsed] = await Promise.all([
+                this.fetchCurrentSolutionCount(),
+                this.fetchTotalSolutions(),
+                this.fetchHintsUsed(),
+            ]);
+            this.updateSolutionCountDisplay(currentCount, totalCount);
+            const hintsEl = document.getElementById('hints-used-count');
+            if (hintsEl) hintsEl.textContent = hintsUsed;
+            if (currentCount === totalCount && totalCount > 0) {
+                this.showMessage('CONGRATULATIONS! YOU HAVE FOUND EVERY SOLUTION TO THIS PUZZLE!', 0);
+            }
+        } catch (error) {
+            console.error('Error updating solution counts:', error);
+        }
     }
 
     scanGridState() {

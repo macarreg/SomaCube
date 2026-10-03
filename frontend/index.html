@@ -1,53 +1,149 @@
 <!DOCTYPE html>
 <html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>SOMA Cube Solver</title>
-        <script type="importmap">
-            { 
-                "imports": {
-                    "three": "/node_modules/three/build/three.module.js",
-                    "three/addons/": "/node_modules/three/examples/jsm/",
-                    "three/addons/controls/OrbitControls.js": "/node_modules/three/examples/jsm/controls/OrbitControls.js"
-                }
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>SOMA Cube Solver</title>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.152.0/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.152.0/examples/jsm/",
+                "@supabase/supabase-js": "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm"
             }
-        </script>
-        <link rel="stylesheet" href="style.css">
-        <script type="module" src="js/main.js"></script>
-    </head>
-    <body>
-        <h2>SOMA Cube Solver</h2>
-        <div class="controls" style="visibility: hidden;">
-            <div id="shape-selector" class="shape-selector"></div>
-            <div class="button-group">
-                <button id="check-solution">Check Solution</button>
-                <button id="hint">Hint</button>
-                <button id="reset-grid">Reset Grid</button>
-                <button id="remove-selected">Remove Selected</button>
+        }
+    </script>
+
+    <link rel="stylesheet" href="style.css">
+    <script type="module" src="js/main.js"></script>
+</head>
+
+<body>
+    <div class="app">
+
+        <!-- Header -->
+        <header class="app-header">
+            <div class="header-title">
+                <h1>SOMA Cube Solver</h1>
+                <p>Build, solve, and explore SOMA Cube solutions.</p>
             </div>
-        </div>
-        <div id="solution-counter">
-            <span>Solutions Found: </span>
-            <span id="solution-count">0</span>
-            <span>/</span>
-            <span id="total-solutions">0</span>
-        </div>
-        <div id="instructions">
-            <h3>Controls:</h3>
-            <p>Arrow Keys: Move piece in X/Y plane</p>
-            <p>Z/X: Move piece in/out (Z axis)</p>
-            <p>R: Rotate around X axis</p>
-            <p>F: Rotate around Y axis</p>
-            <p>V: Rotate around Z axis</p>
-            <p>Delete: Remove selected piece</p>
-            <p>Hint: Place the next piece toward an unsolved solution</p>
-        </div>
-        <div id="container"></div>
-        <div id="pieces-panel">
-            <h3>Available Pieces</h3>
-            <div id="pieces-container"></div>
-        </div>
-        <div id="message"></div>
-    </body>
+
+            <div id="auth-panel" class="auth-panel">
+                <div id="auth-logged-out" class="auth-logged-out">
+                    <input
+                        type="email"
+                        id="auth-email"
+                        placeholder="Email"
+                        autocomplete="email"
+                    >
+
+                    <input
+                        type="password"
+                        id="auth-password"
+                        placeholder="Password"
+                        autocomplete="current-password"
+                    >
+
+                    <button type="button" id="auth-login" class="button button-secondary">
+                        Log In
+                    </button>
+
+                    <button type="button" id="auth-signup" class="button button-primary">
+                        Sign Up
+                    </button>
+
+                    <span id="auth-status"></span>
+                </div>
+
+                <div id="auth-logged-in" class="auth-logged-in">
+                    <span id="auth-user-email"></span>
+
+                    <button type="button" id="auth-logout" class="button button-secondary">
+                        Log Out
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Controls -->
+        <section class="controls" aria-label="Puzzle controls">
+            <div id="shape-selector" class="shape-selector"></div>
+
+            <div class="button-group">
+                <button id="check-solution" class="button button-primary">
+                    Check Solution
+                </button>
+
+                <button id="hint" class="button button-accent">
+                    Hint
+                </button>
+
+                <button id="reset-grid" class="button button-secondary">
+                    Reset Grid
+                </button>
+
+                <button id="remove-selected" class="button button-secondary">
+                    Remove Selected
+                </button>
+            </div>
+        </section>
+
+        <!-- Main workspace -->
+        <main class="workspace">
+
+            <!-- Available pieces -->
+            <aside id="pieces-panel" class="pieces-panel">
+                <div class="panel-header">
+                    <h2>Available Pieces</h2>
+                    <span class="panel-subtitle">Select a piece to place</span>
+                </div>
+
+                <div id="pieces-container" class="pieces-container"></div>
+            </aside>
+
+            <!-- Three.js area -->
+            <section id="container" class="canvas-container" aria-label="SOMA Cube">
+                <!-- Three.js canvas is inserted here -->
+            </section>
+
+        </main>
+
+        <!-- Bottom panel: status + controls -->
+        <footer class="bottom-panel">
+            <div class="status-group">
+                <div id="solution-counter" class="status-card">
+                    <span>Solutions Found</span>
+                    <strong>
+                        <span id="solution-count">0</span>
+                        <span class="status-divider">/</span>
+                        <span id="total-solutions">0</span>
+                    </strong>
+                </div>
+
+                <div id="hints-counter" class="status-card">
+                    <span>Hints Used</span>
+                    <strong id="hints-used-count">0</strong>
+                </div>
+            </div>
+
+            <div id="instructions" class="instructions">
+                <h2>Controls</h2>
+                <div class="instructions-grid">
+                    <p><kbd>Arrow Keys</kbd> Move in X/Y</p>
+                    <p><kbd>Z</kbd> / <kbd>X</kbd> Move in/out</p>
+                    <p><kbd>R</kbd> Rotate X</p>
+                    <p><kbd>F</kbd> Rotate Y</p>
+                    <p><kbd>V</kbd> Rotate Z</p>
+                    <p><kbd>Delete</kbd> Remove piece</p>
+                </div>
+            </div>
+        </footer>
+
+        <!-- Temporary messages -->
+        <div id="message" role="status" aria-live="polite"></div>
+
+    </div>
+</body>
 </html>
