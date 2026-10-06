@@ -3,6 +3,7 @@ import { PieceManager } from './pieceManager.js';
 import { UIController } from './uiController.js';
 import { Renderer } from './renderer.js';
 import { AuthController } from './authController.js';
+import { LeaderboardController } from './leaderboardController.js';
 
 class SomaSolver {
     constructor() {
@@ -11,6 +12,7 @@ class SomaSolver {
         this.pieceManager = null;
         this.authController = null;
         this.uiController = null;
+        this.leaderboardController = null;
     }
 
     async init() {
@@ -20,6 +22,7 @@ class SomaSolver {
             this.pieceManager = new PieceManager(this.renderer);
             this.authController = new AuthController();
             this.uiController = new UIController(this.pieceManager, this.gridManager, this.authController);
+            this.leaderboardController = new LeaderboardController(this.authController);
     
             window.uiController = this.uiController;
             window.addEventListener('mousemove', (e) => this.renderer.onMouseMove(e));
@@ -33,7 +36,10 @@ class SomaSolver {
     
             // Auth is optional: if Supabase is unreachable, keep playing anonymously.
             try {
-                await this.authController.init(() => this.uiController.updateSolutionCounts());
+                await this.authController.init(() => {
+                    this.uiController.updateSolutionCounts();
+                    this.leaderboardController.onAuthChange();
+                });
             } catch (authError) {
                 console.error('Auth unavailable, continuing anonymously:', authError);
                 const status = document.getElementById('auth-status');

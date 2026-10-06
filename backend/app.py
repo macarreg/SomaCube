@@ -11,12 +11,14 @@ from soma_grid import SomaGrid
 from utils import handle_solution, load_solutions, normalize_solution, VALID_PIECES
 from hint_solver import compute_hint, get_next_hint_piece
 from config import Config
-from models import db, Solution, User
+from models import db, Solution, User, HintEvent
 from scoring import get_user_shape_stats, get_leaderboard, has_user_found_solution, get_user_solution_count
 from sqlalchemy.exc import IntegrityError
 from auth import load_current_user, require_auth, _decode_token, check_email_exists
 from typing import Optional
 from functools import lru_cache
+from usernames import validate_username, is_username_taken
+from totals import get_shape_total, is_known_shape
 
 
 logging.basicConfig(level=logging.DEBUG)
@@ -177,11 +179,11 @@ def get_shape_solutions(shape_id):
         "solution_count": solution_count
     })
 
-def _record_hint() -> Optional[int]:
-    """Atomically add 1 to the logged-in user's hint counter.
-    Returns the new total, or None for anonymous users, a missing users
-    row, or a DB failure."""
-    if g.user_id is None:
+def _record_hint(shape_id: str, piece_id: Optional[str]) -> Optional[int]:
+    """Atomically add 1 to the logged-in user's hint counter and log the
+    per-shape event. Returns the new total, or None for anonymous users,
+    an unknown figure, a missing users row, or a DB failure."""
+    if g.user_id is None or not is_known_shape(shape_id):
         return None
     try:
         new_total = db.session.execute(
@@ -191,11 +193,14 @@ def _record_hint() -> Optional[int]:
             .returning(User.hints_used)
             .execution_options(synchronize_session=False)
         ).scalar_one_or_none()
+        if new_total is not None:
+            db.session.add(HintEvent(user_id=g.user_id, shape_id=shape_id,
+                                     piece_id=piece_id))
         db.session.commit()
         return new_total
     except Exception as e:
         db.session.rollback()
-        logger.error(f"Failed to increment hints_used: {e}")
+        logger.error(f"Failed to record hint: {e}")
         return None
 
 
@@ -220,7 +225,7 @@ def get_hint():
         if cached_solution:
             hint = get_next_hint_piece(grid_state, cached_solution, ignored_pieces)
             if hint is not None:
-                hints_used = _record_hint()
+                hints_used = _record_hint(shape_id, hint['piece_id'])
                 return jsonify({
                     "success": True,
                     "message": f"Hint: place the {hint['piece_id']} piece.",
@@ -233,7 +238,7 @@ def get_hint():
                 })
 
         result = compute_hint(grid_state, shape_id)
-        hints_used = _record_hint() if result.get("success") else None
+        hints_used = _record_hint(shape_id, result['hint']['piece_id']) if result.get("success") else None
         result["tracked"] = hints_used is not None
         result["hints_used"] = hints_used
         return jsonify(result)
@@ -243,29 +248,14 @@ def get_hint():
         return jsonify({"error": str(e)}), 500
 
 
-@lru_cache(maxsize=256)          # exceptions aren't cached, only successes
-def _count_total_solutions(shape_id: str) -> int:
-    base = os.path.dirname(__file__)
-    soma_path = os.path.join(base, 'yass', 'figures', f"{shape_id}.soma")
-    soma_executable = os.path.join(base, 'yass', 'soma')
-    result = subprocess.run(
-        [soma_executable, '-acr', soma_path],
-        capture_output=True, text=True,
-        cwd=os.path.join(base, 'yass'),
-        timeout=60,
-    )
-    if result.returncode != 0:
-        raise RuntimeError("soma exited non-zero")
-    return int(result.stdout.split()[-2])
-
-
 @app.route('/api/total-solutions/<shape_id>')
 def get_total_solutions(shape_id):
-    try:
-        return jsonify({"total_solutions": _count_total_solutions(shape_id)})
-    except Exception as e:
-        logger.error(f"Error getting total solutions for {shape_id}: {str(e)}")
+    if not is_known_shape(shape_id):
+        return jsonify({"error": "Unknown figure"}), 404
+    total = get_shape_total(shape_id)
+    if total is None:
         return jsonify({"error": "Failed to get total solutions"}), 500
+    return jsonify({"total_solutions": total})
 
     
 @app.route('/api/stats/<shape_id>')
@@ -274,11 +264,15 @@ def get_stats(shape_id):
         return jsonify({"solutions_found": 0, "hints_used": 0})
     return jsonify(get_user_shape_stats(g.user_id, shape_id))
 
+LEADERBOARD_LIMIT = 50
+
 @app.route('/api/leaderboard')
+@limiter.limit("60 per minute")
 def leaderboard():
-    shape_id = request.args.get('shape_id')
-    rows = get_leaderboard(shape_id=shape_id)
-    return jsonify([{"user_id": uid, "solutions_found": total} for uid, total in rows])
+    shape_id = (request.args.get('shape_id') or 'total').strip()
+    if shape_id != 'total' and not is_known_shape(shape_id):
+        return jsonify({"error": "unknown_shape", "message": "Unknown figure."}), 404
+    return jsonify(get_leaderboard(shape_id, g.user_id, LEADERBOARD_LIMIT))
 
 @app.route('/api/auth/check-email', methods=['POST'])
 @limiter.limit("5 per minute;20 per hour")  # this endpoint answers "does this email exist?" — keep it tight
@@ -292,6 +286,51 @@ def check_email():
     if exists is None:
         return jsonify({"exists": None, "error": "Could not verify at this time"}), 503
     return jsonify({"exists": exists})
+
+@app.route('/api/auth/check-username', methods=['POST'])
+@limiter.limit("20 per minute;200 per hour")
+def check_username():
+    data = request.get_json(silent=True) or {}
+    name, error = validate_username(data.get('username'))
+    if error:
+        return jsonify({"available": False, "message": error})
+    if is_username_taken(name):
+        return jsonify({"available": False, "message": "That username is already taken."})
+    return jsonify({"available": True})
+
+
+@app.route('/api/me')
+def me():
+    if g.user_id is None:
+        return jsonify({"authenticated": False, "username": None})
+    user = db.session.get(User, g.user_id)
+    return jsonify({"authenticated": True, "username": user.username if user else None})
+
+
+@app.route('/api/me/username', methods=['POST'])
+@require_auth
+@limiter.limit("10 per hour")
+def set_username():
+    data = request.get_json(silent=True) or {}
+    name, error = validate_username(data.get('username'))
+    if error:
+        return jsonify({"error": "invalid_username", "message": error}), 400
+
+    user = db.session.get(User, g.user_id)
+    if user is None:
+        return jsonify({"error": "no_profile", "message": "Your profile isn't ready yet. Please refresh and try again."}), 404
+    if user.username:
+        return jsonify({"error": "already_set", "message": "You already have a username."}), 409
+    if is_username_taken(name, exclude_user_id=g.user_id):
+        return jsonify({"error": "taken", "message": "That username is already taken."}), 409
+
+    user.username = name
+    try:
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()   # lost a race with someone claiming the same name
+        return jsonify({"error": "taken", "message": "That username is already taken."}), 409
+    return jsonify({"username": name})
 
 
 @app.route('/api/whoami')

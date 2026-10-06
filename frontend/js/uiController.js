@@ -102,6 +102,7 @@ export class UIController {
     handleKeyDown(event) {
         // Don't hijack typing in the login form or the shape dropdown.
         const t = event.target;
+        if (document.querySelector('.app--leaderboard')) return;
         if (t instanceof HTMLElement &&
             (t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName))) return;
         if (event.ctrlKey || event.metaKey || event.altKey) return;

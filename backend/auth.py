@@ -22,6 +22,9 @@ from config import Config
 import ssl
 import certifi
 
+from sqlalchemy.exc import SQLAlchemyError
+from usernames import validate_username
+
 _SSL_CONTEXT = ssl.create_default_context(cafile=certifi.where())
 
 logger = logging.getLogger(__name__)
@@ -101,19 +104,32 @@ def get_user_id_from_request() -> Optional[UUID]:
         return None
 
 
-def _upsert_user(user_id: UUID, email: Optional[str]) -> None:
-    """Keep the local `users` mirror table in sync with the verified token.
-    Best-effort: a failure here must never break the request."""
+def _upsert_user(user_id: UUID, email: Optional[str], desired_username: Optional[str] = None) -> None:
+    """Keep the local `users` mirror in sync with the verified token.
+    The username is only read when the row is first created (it comes from
+    the signup metadata) and is never overwritten afterwards, so manual
+    edits in the database stick. Best-effort: never breaks the request."""
     if not email:
         return
     from models import db, User  # local import: avoids a circular import with app.py
     try:
         user = db.session.get(User, user_id)
         if user is None:
-            db.session.add(User(id=user_id, email=email))
+            username, _ = validate_username(desired_username)
+            try:
+                db.session.add(User(id=user_id, email=email, username=username))
+                db.session.commit()
+            except IntegrityError:
+                db.session.rollback()
+                if username is not None:
+                    # Most likely someone claimed the name first. Create the
+                    # row without it; the user is prompted to pick another.
+                    db.session.add(User(id=user_id, email=email))
+                    db.session.commit()
+                # else: a concurrent request already created the row
         elif user.email != email:
             user.email = email
-        db.session.commit()
+            db.session.commit()
     except Exception as e:
         db.session.rollback()
         logger.error(f"Failed to upsert user {user_id}: {e}")
@@ -131,7 +147,8 @@ def load_current_user():
         logger.debug(f"Rejected auth token: {e}")
         g.user_id = None
         return
-    _upsert_user(g.user_id, claims.get("email"))
+    metadata = claims.get("user_metadata") or {}
+    _upsert_user(g.user_id, claims.get("email"), metadata.get("username"))
 
 
 def require_auth(view):

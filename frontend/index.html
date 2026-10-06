@@ -57,6 +57,11 @@
                 <p>Build, solve, and explore SOMA Cube solutions.</p>
             </div>
 
+            <nav class="tabs" role="tablist" aria-label="Views">
+                <button type="button" id="tab-puzzle" class="tab" role="tab" aria-selected="true">Puzzle</button>
+                <button type="button" id="tab-leaderboard" class="tab" role="tab" aria-selected="false">Leaderboard</button>
+            </nav>
+
             <div id="auth-panel" class="auth-panel">
                 <div id="auth-logged-out" class="auth-logged-out">
                     <input
@@ -73,6 +78,15 @@
                         autocomplete="current-password"
                     >
 
+                    <input
+                        type="text"
+                        id="auth-username"
+                        placeholder="Username"
+                        autocomplete="off"
+                        maxlength="20"
+                        hidden
+                    >
+
                     <button type="button" id="auth-login" class="button button-secondary">
                         Log In
                     </button>
@@ -86,7 +100,22 @@
 
                 <div id="auth-logged-in" class="auth-logged-in">
                     <span id="auth-user-email"></span>
-
+                
+                    <span id="auth-username-prompt" class="auth-username-prompt" hidden>
+                        <input
+                            type="text"
+                            id="auth-set-username"
+                            placeholder="Choose a username"
+                            autocomplete="off"
+                            maxlength="20"
+                        >
+                        <button type="button" id="auth-set-username-btn" class="button button-primary">
+                            Save
+                        </button>
+                    </span>
+                
+                    <span id="auth-profile-status"></span>
+                
                     <button type="button" id="auth-logout" class="button button-secondary">
                         Log Out
                     </button>
@@ -185,6 +214,22 @@
                 </div>
             </div>
         </footer>
+
+        <section id="leaderboard-view" class="leaderboard" aria-label="Leaderboard" hidden>
+            <div class="leaderboard-toolbar">
+                <label for="leaderboard-shape">Show</label>
+                <select id="leaderboard-shape"></select>
+                <button type="button" id="leaderboard-refresh" class="button button-secondary">Refresh</button>
+            </div>
+        
+            <div id="leaderboard-me" class="leaderboard-me"></div>
+        
+            <div class="leaderboard-table-wrap">
+                <table id="leaderboard-table" class="leaderboard-table"></table>
+            </div>
+        
+            <p id="leaderboard-note" class="leaderboard-note" role="status"></p>
+        </section>
 
         <!-- Temporary messages -->
         <div id="message" role="status" aria-live="polite"></div>
