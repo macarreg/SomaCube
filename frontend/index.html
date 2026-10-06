@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
     <title>SOMA Cube Solver</title>
-
+    <script async src="https://cdn.jsdelivr.net/npm/es-module-shims@1.10.0/dist/es-module-shims.js"></script>
     <script type="importmap">
         {
             "imports": {
@@ -21,6 +21,33 @@
 </head>
 
 <body>
+    <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+        <defs>
+            <symbol id="icon-arrow-up" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+            <symbol id="icon-arrow-down" viewBox="0 0 24 24"><path d="M12 5v14M19 12l-7 7-7-7" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+            <symbol id="icon-arrow-left" viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+            <symbol id="icon-arrow-right" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+            <symbol id="icon-in" viewBox="0 0 24 24"><path d="M17 7 7 17M17 17H7V7" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+            <symbol id="icon-out" viewBox="0 0 24 24"><path d="M7 17 17 7M7 7h10v10" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+            <symbol id="icon-rotate-x" viewBox="0 0 24 24">
+                <!-- horizontal axis, vertical loop -->
+                <path d="M3 12h18" opacity=".35" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                <path d="M12 4c-2 0-3.5 3.6-3.5 8s1.5 8 3.5 8" opacity=".35" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                <path d="M12 4c2 0 3.5 3.6 3.5 8s-1.5 8-3.5 8M14.5 17.5 12 20l2.5 2.5" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </symbol>
+            <symbol id="icon-rotate-y" viewBox="0 0 24 24">
+                <!-- vertical axis, flat loop -->
+                <path d="M12 3v18" opacity=".35" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                <path d="M4 12c0-2 3.6-3.5 8-3.5s8 1.5 8 3.5" opacity=".35" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                <path d="M4 12c0 2 3.6 3.5 8 3.5s8-1.5 8-3.5M17.5 14.5 20 12l2.5 2.5" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </symbol>
+            <symbol id="icon-rotate-z" viewBox="0 0 24 24">
+                <!-- axis points out of the screen: circular arrow with a center dot -->
+                <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8M21 3v5h-5" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                <circle cx="12" cy="12" r="2" fill="currentColor"/>
+            </symbol>
+        </defs>
+    </svg>
     <div class="app">
 
         <!-- Header -->
@@ -88,6 +115,25 @@
                     Remove Selected
                 </button>
             </div>
+            <div id="piece-controls" class="piece-controls" role="group" aria-label="Move and rotate selected piece">
+                <div class="ctrl-group" role="group" aria-label="Move X / Y">
+                    <button type="button" class="ctrl-btn" data-action="moveLeft"  aria-label="Move left"><svg aria-hidden="true"><use href="#icon-arrow-left"/></svg></button>
+                    <button type="button" class="ctrl-btn" data-action="moveUp"    aria-label="Move up"><svg aria-hidden="true"><use href="#icon-arrow-up"/></svg></button>
+                    <button type="button" class="ctrl-btn" data-action="moveDown"  aria-label="Move down"><svg aria-hidden="true"><use href="#icon-arrow-down"/></svg></button>
+                    <button type="button" class="ctrl-btn" data-action="moveRight" aria-label="Move right"><svg aria-hidden="true"><use href="#icon-arrow-right"/></svg></button>
+                </div>
+            
+                <div class="ctrl-group" role="group" aria-label="Move Z">
+                    <button type="button" class="ctrl-btn ctrl-btn--wide" data-action="moveIn"  aria-label="Move in (Z minus)"><svg aria-hidden="true"><use href="#icon-in"/></svg><span>Z−</span></button>
+                    <button type="button" class="ctrl-btn ctrl-btn--wide" data-action="moveOut" aria-label="Move out (Z plus)"><svg aria-hidden="true"><use href="#icon-out"/></svg><span>Z+</span></button>
+                </div>
+            
+                <div class="ctrl-group" role="group" aria-label="Rotate">
+                    <button type="button" class="ctrl-btn ctrl-btn--wide" data-action="rotateX" aria-label="Rotate around X"><svg aria-hidden="true"><use href="#icon-rotate-x"/></svg><span>X</span></button>
+                    <button type="button" class="ctrl-btn ctrl-btn--wide" data-action="rotateY" aria-label="Rotate around Y"><svg aria-hidden="true"><use href="#icon-rotate-y"/></svg><span>Y</span></button>
+                    <button type="button" class="ctrl-btn ctrl-btn--wide" data-action="rotateZ" aria-label="Rotate around Z"><svg aria-hidden="true"><use href="#icon-rotate-z"/></svg><span>Z</span></button>
+                </div>
+            </div>
         </section>
 
         <!-- Main workspace -->
@@ -109,7 +155,6 @@
             </section>
 
         </main>
-
         <!-- Bottom panel: status + controls -->
         <footer class="bottom-panel">
             <div class="status-group">

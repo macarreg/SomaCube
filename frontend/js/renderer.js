@@ -25,7 +25,7 @@ export class Renderer {
         this.camera.lookAt(0, 0, 0);
     
         this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-        this.renderer.setPixelRatio(window.devicePixelRatio);
+        this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         this.renderer.setSize(width, height, false); // false = let CSS size the canvas
         this.renderer.shadowMap.enabled = true;
     

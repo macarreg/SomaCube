@@ -20,16 +20,25 @@ class SomaSolver {
             this.pieceManager = new PieceManager(this.renderer);
             this.authController = new AuthController();
             this.uiController = new UIController(this.pieceManager, this.gridManager, this.authController);
-
+    
             window.uiController = this.uiController;
-
-            await this.authController.init(() => this.uiController.updateSolutionCounts());            // Sets default figure to cube, but we can use any figure in yass/figures or the new dropdown menu
-            await this.gridManager.loadGrid('cube');
-
             window.addEventListener('mousemove', (e) => this.renderer.onMouseMove(e));
-            
+    
+            // Grid + render loop come first: they only need our own backend.
             this.renderer.animate();
-
+            const gridLoaded = await this.gridManager.loadGrid('cube');
+            if (!gridLoaded) {
+                this.uiController.showMessage('Failed to load the grid. Please refresh.', 0);
+            }
+    
+            // Auth is optional: if Supabase is unreachable, keep playing anonymously.
+            try {
+                await this.authController.init(() => this.uiController.updateSolutionCounts());
+            } catch (authError) {
+                console.error('Auth unavailable, continuing anonymously:', authError);
+                const status = document.getElementById('auth-status');
+                if (status) status.textContent = 'Login is unavailable right now.';
+            }
         } catch (error) {
             console.error('Error initializing application:', error);
             alert('Failed to initialize application. Please refresh the page.');

@@ -1,6 +1,19 @@
 import { SOMA_PIECES, VALID_PIECES, SHAPE_IDS } from './constants.js';
 import * as THREE from 'three';
 
+const KEY_TO_ACTION = {
+    ArrowLeft: 'moveLeft',
+    ArrowRight: 'moveRight',
+    ArrowUp: 'moveUp',
+    ArrowDown: 'moveDown',
+    z: 'moveIn',
+    x: 'moveOut',
+    r: 'rotateX',
+    f: 'rotateY',
+    v: 'rotateZ',
+    Delete: 'remove',
+};
+
 export class UIController {
     constructor(pieceManager, gridManager, authController) {
         this.pieceManager = pieceManager;
@@ -19,11 +32,11 @@ export class UIController {
     async initializeUI() {
         this.createShapeSelector();
         this.initializeEventListeners();
-        await this.initializeSolutionCounts();
+    
         const controls = document.querySelector('.controls');
-        if (controls) {
-            controls.style.visibility = 'visible';
-        }
+        if (controls) controls.style.visibility = 'visible';
+    
+        await this.initializeSolutionCounts();   // slow call no longer gates the UI
     }
 
     async initializeSolutionCounts() {
@@ -32,6 +45,72 @@ export class UIController {
         } catch (error) {
             console.error('Error initializing solution counts:', error);
         }
+    }
+
+    initializeEventListeners() {
+        const checkButton = document.getElementById('check-solution');
+        const hintButton = document.getElementById('hint');
+        const resetButton = document.getElementById('reset-grid');
+        const removeButton = document.getElementById('remove-selected');
+        
+        if (checkButton) checkButton.addEventListener('click', () => this.checkSolution());
+        if (hintButton) hintButton.addEventListener('click', () => this.requestHint());
+        if (resetButton) resetButton.addEventListener('click', () => this.resetGrid());
+        if (removeButton) removeButton.addEventListener('click', () => this.pieceManager.removeSelectedPiece());
+        window.addEventListener('keydown', (event) => this.handleKeyDown(event));
+        this.initializeTouchControls();
+    }
+
+    // One source of truth: keyboard and on-screen buttons both go through here.
+    _controlActions() {
+        const pm = this.pieceManager;
+        return {
+            moveLeft:  () => pm.movePiece('x', -1),
+            moveRight: () => pm.movePiece('x', 1),
+            moveUp:    () => pm.movePiece('y', 1),
+            moveDown:  () => pm.movePiece('y', -1),
+            moveIn:    () => pm.movePiece('z', -1),
+            moveOut:   () => pm.movePiece('z', 1),
+            rotateX:   () => pm.rotatePiece('x'),
+            rotateY:   () => pm.rotatePiece('y'),
+            rotateZ:   () => pm.rotatePiece('z'),
+            remove:    () => pm.removeSelectedPiece(),
+        };
+    }
+
+    runControlAction(actionName) {
+        const action = this._controlActions()[actionName];
+        if (action) action();
+    }
+
+    initializeTouchControls() {
+        const panel = document.getElementById('piece-controls');
+        if (!panel) return;
+    
+        panel.addEventListener('click', (event) => {
+            const button = event.target.closest('[data-action]');
+            if (!button) return;
+    
+            if (!this.pieceManager.selectedPiece) {
+                this.showMessage('Tap a piece in the list first');
+                return;
+            }
+            this.runControlAction(button.dataset.action);
+        });
+    }
+
+    handleKeyDown(event) {
+        // Don't hijack typing in the login form or the shape dropdown.
+        const t = event.target;
+        if (t instanceof HTMLElement &&
+            (t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName))) return;
+        if (event.ctrlKey || event.metaKey || event.altKey) return;
+
+        const actionName = KEY_TO_ACTION[event.key];
+        if (!actionName || !this.pieceManager.selectedPiece) return;
+
+        if (event.key.startsWith('Arrow')) event.preventDefault();
+        this.runControlAction(actionName);
     }
 
     showMessage(message, duration = 3000) {
@@ -57,41 +136,7 @@ export class UIController {
         }
     }
 
-    initializeEventListeners() {
-        const checkButton = document.getElementById('check-solution');
-        const hintButton = document.getElementById('hint');
-        const resetButton = document.getElementById('reset-grid');
-        const removeButton = document.getElementById('remove-selected');
-        
-        if (checkButton) checkButton.addEventListener('click', () => this.checkSolution());
-        if (hintButton) hintButton.addEventListener('click', () => this.requestHint());
-        if (resetButton) resetButton.addEventListener('click', () => this.resetGrid());
-        if (removeButton) removeButton.addEventListener('click', () => this.pieceManager.removeSelectedPiece());
-        window.addEventListener('keydown', (event) => this.handleKeyDown(event));
-    }
-
     setShapeId(shapeId) {this.currentShapeId = shapeId;}
-
-    handleKeyDown(event) {
-        if (!this.pieceManager.selectedPiece) return;
-        if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) {event.preventDefault();}
-        
-        const keyActions = {
-            'ArrowLeft': () => this.pieceManager.movePiece('x', -1),
-            'ArrowRight': () => this.pieceManager.movePiece('x', 1),
-            'ArrowUp': () => this.pieceManager.movePiece('y', 1),
-            'ArrowDown': () => this.pieceManager.movePiece('y', -1),
-            'z': () => this.pieceManager.movePiece('z', -1),
-            'x': () => this.pieceManager.movePiece('z', 1),
-            'r': () => this.pieceManager.rotatePiece('x'),
-            'f': () => this.pieceManager.rotatePiece('y'),
-            'v': () => this.pieceManager.rotatePiece('z'),
-            'Delete': () => this.pieceManager.removeSelectedPiece()
-        };
-
-        const action = keyActions[event.key];
-        if (action) action();
-    }
 
     async _apiError(response, fallback) {
         let body = {};
@@ -219,7 +264,7 @@ export class UIController {
         const el = document.getElementById('hints-used-count');
         if (el && Number.isInteger(n)) el.textContent = n;
     }
-    
+
 
     async requestHint() {
         const yassFormat = this.convertToYassFormat(this.scanGridState());

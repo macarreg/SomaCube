@@ -16,6 +16,7 @@ from scoring import get_user_shape_stats, get_leaderboard, has_user_found_soluti
 from sqlalchemy.exc import IntegrityError
 from auth import load_current_user, require_auth, _decode_token, check_email_exists
 from typing import Optional
+from functools import lru_cache
 
 
 logging.basicConfig(level=logging.DEBUG)
@@ -241,26 +242,31 @@ def get_hint():
         logger.error(f"Error computing hint: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
+
+@lru_cache(maxsize=256)          # exceptions aren't cached, only successes
+def _count_total_solutions(shape_id: str) -> int:
+    base = os.path.dirname(__file__)
+    soma_path = os.path.join(base, 'yass', 'figures', f"{shape_id}.soma")
+    soma_executable = os.path.join(base, 'yass', 'soma')
+    result = subprocess.run(
+        [soma_executable, '-acr', soma_path],
+        capture_output=True, text=True,
+        cwd=os.path.join(base, 'yass'),
+        timeout=60,
+    )
+    if result.returncode != 0:
+        raise RuntimeError("soma exited non-zero")
+    return int(result.stdout.split()[-2])
+
+
 @app.route('/api/total-solutions/<shape_id>')
 def get_total_solutions(shape_id):
     try:
-        soma_path = os.path.join(os.path.dirname(__file__), 'yass', 'figures', f"{shape_id}.soma")
-        soma_executable = os.path.join(os.path.dirname(__file__), 'yass', 'soma')
-        
-        result = subprocess.run([soma_executable, '-acr', soma_path], 
-                              capture_output=True, 
-                              text=True,
-                              cwd=os.path.join(os.path.dirname(__file__), 'yass'))
-        
-        if result.returncode != 0:
-            return jsonify({"error": "Failed to get total solutions"}), 500
-            
-        total_solutions = int(result.stdout.split()[-2])
-        return jsonify({"total_solutions": total_solutions})
-            
+        return jsonify({"total_solutions": _count_total_solutions(shape_id)})
     except Exception as e:
         logger.error(f"Error getting total solutions for {shape_id}: {str(e)}")
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Failed to get total solutions"}), 500
+
     
 @app.route('/api/stats/<shape_id>')
 def get_stats(shape_id):
