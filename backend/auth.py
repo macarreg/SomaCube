@@ -13,7 +13,6 @@ import urllib.request
 from functools import wraps
 from typing import Optional
 from uuid import UUID
-
 import jwt
 from flask import request, g, jsonify
 from jwt import PyJWKClient
@@ -22,7 +21,7 @@ from config import Config
 import ssl
 import certifi
 
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import SQLAlchemyError, IntegrityError
 from usernames import validate_username
 
 _SSL_CONTEXT = ssl.create_default_context(cafile=certifi.where())

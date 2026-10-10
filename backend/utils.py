@@ -158,6 +158,7 @@ def handle_solution(shape_id: str, solution: str, check_only: bool = False) -> T
         if not is_known and not check_only:
             solutions.add(normalized)
             solutions_file = os.path.join(os.path.dirname(__file__), 'solutions', f"{shape_id}_solutions.json")
+            os.makedirs(os.path.dirname(solutions_file), exist_ok=True)
             with open(solutions_file, 'w') as f:
                 json.dump(list(solutions), f)
         

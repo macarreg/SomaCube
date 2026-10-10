@@ -21,11 +21,19 @@ export class AuthController {
         this._render();
         this._loadProfile();
 
-        this.supabase.auth.onAuthStateChange((_event, session) => {
+        this.supabase.auth.onAuthStateChange(async (event, session) => {
             this.session = session;
             this._render();
-            this._loadProfile();      // intentionally not awaited
+            this._loadProfile();
             this.onChange?.();
+        
+            if (event === 'PASSWORD_RECOVERY') {
+                const pw = window.prompt('Enter your new password (min 6 characters):');
+                if (pw) {
+                    const { error } = await this.supabase.auth.updateUser({ password: pw });
+                    alert(error ? error.message : 'Password updated!');
+                }
+            }
         });
 
         this._wireForm();
@@ -152,6 +160,7 @@ export class AuthController {
                 email,
                 password: passwordInput.value,
                 options: { data: { username } },
+                emailRedirectTo: `${window.location.origin}/auth/callback`,
             });
         
             if (error) {
@@ -226,7 +235,7 @@ export class AuthController {
                 resetBtn.textContent = 'Send password reset email';
                 resetBtn.addEventListener('click', async () => {
                     this._startCooldown(resetBtn);
-                    const { error: resetErr } = await this.supabase.auth.resetPasswordForEmail(email);
+                    const { error: resetErr } = await this.supabase.auth.resetPasswordForEmail(email, {emailRedirectTo: `${window.location.origin}/auth/callback`});
                     statusEl.textContent = resetErr ? resetErr.message : 'Password reset email sent — check your inbox.';
                 });
                 statusEl.replaceChildren(msg, resetBtn);

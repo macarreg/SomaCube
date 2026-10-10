@@ -105,7 +105,7 @@ def check_solution():
         # "your" progress. Only `is_valid`/`normalized` are used below;
         # per-user truth comes from the `solutions` DB table via scoring.py.
         is_valid, is_new, normalized, _ = handle_solution(
-            shape_id, grid_state, check_only=not save_if_new
+            shape_id, grid_state, check_only=True
         )
 
         if not is_valid:
