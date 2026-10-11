@@ -6,13 +6,12 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 import os
 import logging
-import subprocess
 from soma_grid import SomaGrid
-from utils import handle_solution, load_solutions, normalize_solution, VALID_PIECES
+from utils import handle_solution, is_valid_placement, normalize_solution, VALID_PIECES
 from hint_solver import compute_hint, get_next_hint_piece
 from config import Config
 from models import db, Solution, User, HintEvent
-from scoring import get_user_shape_stats, get_leaderboard, has_user_found_solution, get_user_solution_count
+from scoring import get_user_shape_stats, get_leaderboard, has_user_found_solution, get_user_solution_count, get_user_found_solutions
 from sqlalchemy.exc import IntegrityError
 from auth import load_current_user, require_auth, _decode_token, check_email_exists
 from typing import Optional
@@ -215,29 +214,39 @@ def get_hint():
         grid_state = data['grid_state']
         shape_id = data['shape_id']
         cached_solution = data.get('cached_solution')
-
         ignored_pieces = set(data.get('ignored_pieces', []))
 
-        # Fast path: the client already holds a full solution, so just pick
-        # the next piece from it. If the board has diverged from that
-        # solution (or every piece is placed), get_next_hint_piece returns
-        # None and we fall through to computing a fresh one below.
-        if cached_solution:
-            hint = get_next_hint_piece(grid_state, cached_solution, ignored_pieces)
-            if hint is not None:
-                hints_used = _record_hint(shape_id, hint['piece_id'])
-                return jsonify({
-                    "success": True,
-                    "message": f"Hint: place the {hint['piece_id']} piece.",
-                    "hint": hint,
-                    "full_solution": cached_solution,
-                    "from_cache": True,
-                    "removed_pieces": [],
-                    "tracked": hints_used is not None,
-                    "hints_used": hints_used,
-                })
+        # shape_id feeds a file path below, so validate it first.
+        if not is_known_shape(shape_id):
+            return jsonify({"error": "Unknown figure"}), 404
 
-        result = compute_hint(grid_state, shape_id)
+        # This user's own found solutions (anonymous users have none to skip).
+        known_solutions = (get_user_found_solutions(g.user_id, shape_id)
+                           if g.user_id is not None else set())
+
+        # Fast path: only trust the client-held solution if it's a valid
+        # tiling of this figure AND the user hasn't already found it.
+        if cached_solution:
+            cache_ok = (
+                is_valid_placement(cached_solution, shape_id)
+                and normalize_solution(cached_solution, shape_id) not in known_solutions
+            )
+            if cache_ok:
+                hint = get_next_hint_piece(grid_state, cached_solution, ignored_pieces)
+                if hint is not None:
+                    hints_used = _record_hint(shape_id, hint['piece_id'])
+                    return jsonify({
+                        "success": True,
+                        "message": f"Hint: place the {hint['piece_id']} piece.",
+                        "hint": hint,
+                        "full_solution": cached_solution,
+                        "from_cache": True,
+                        "removed_pieces": [],
+                        "tracked": hints_used is not None,
+                        "hints_used": hints_used,
+                    })
+
+        result = compute_hint(grid_state, shape_id, known_solutions)
         hints_used = _record_hint(shape_id, result['hint']['piece_id']) if result.get("success") else None
         result["tracked"] = hints_used is not None
         result["hints_used"] = hints_used

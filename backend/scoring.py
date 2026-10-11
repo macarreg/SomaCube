@@ -132,6 +132,12 @@ def get_leaderboard(shape_id="total", viewer_id=None, limit=50):
         "me": me,
     }
 
+def get_user_found_solutions(user_id, shape_id) -> set:
+    """Normalized solution strings this user has already found for a figure."""
+    rows = (db.session.query(Solution.normalized_solution)
+            .filter_by(user_id=user_id, shape_id=shape_id)
+            .all())
+    return {r[0] for r in rows}
 
 def has_user_found_solution(user_id, shape_id, normalized_solution):
     return db.session.query(Solution.id).filter_by(

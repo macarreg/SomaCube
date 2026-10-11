@@ -249,34 +249,15 @@ def _find_solution_for_state(
 def find_new_solution(
     grid_state: str,
     shape_id: str,
+    known_solutions: Set[str],
 ) -> Optional[Tuple[str, Dict[str, Set[Cell]], FrozenSet[str]]]:
     """
-    Find a complete solution not yet in the user's solved set.
+    Find a complete solution not in `known_solutions` (the solutions the
+    requesting user has already found, as normalized strings).
     Tries the current configuration first, then removes 1, 2, ... placed pieces.
+    If a complete tiling is already known, _backtrack keeps searching for a
+    different tiling with the same fixed pieces before giving up on that set.
     Returns (yass_solution, placements, removed_pieces) or None.
-
-    Solution-uniqueness reuses the existing solutions database (utils.py:
-    load_solutions / normalize_solution / is_valid_placement / handle_solution)
-    rather than a separate equivalence system. Two things matter here:
-
-    1. Rejecting a duplicate must not abandon the whole search. If the first
-       complete tiling found for a given set of fixed/removed pieces turns
-       out to already be a known solution, `_backtrack` keeps looking for a
-       *different* tiling with those same fixed pieces before we give up and
-       try removing more pieces. `known_solutions` is loaded once up front
-       (rather than via a fresh handle_solution() call per candidate) so this
-       repeated checking during backtracking doesn't re-read the solutions
-       file from disk for every complete board it considers.
-    2. The solution this function ultimately returns is persisted (via
-       handle_solution(..., check_only=False)) at the moment it's chosen.
-       Previously this used check_only=True, which never wrote to disk — so
-       once a user finished placing every piece of a hinted solution, the
-       very next hint request saw a board that exactly matched that
-       "unrecorded" solution and happily offered it again as "new", instead
-       of moving on to a different one. Persisting here means a solution
-       that's been fully handed out via hints is remembered the same way a
-       manually-completed-and-checked solution is, so subsequent hint
-       requests correctly move on to a different unique solution.
     """
     original_cells, valid_cells = load_original_cells(shape_id)
     cells = parse_yass_grid(grid_state)
@@ -285,14 +266,11 @@ def find_new_solution(
     current_placements = extract_placements(cells)
     placed_piece_ids = sorted(current_placements.keys())
 
-    known_solutions = load_solutions(shape_id)
-
     def accept(candidate_cells: Dict[Cell, str]) -> bool:
         candidate_yass = build_yass(candidate_cells, original_cells)
         if not is_valid_placement(candidate_yass, shape_id):
             return False
-        normalized = normalize_solution(candidate_yass, shape_id)
-        return normalized not in known_solutions
+        return normalize_solution(candidate_yass, shape_id) not in known_solutions
 
     for remove_count in range(len(placed_piece_ids) + 1):
         for removed in itertools.combinations(placed_piece_ids, remove_count):
@@ -309,27 +287,14 @@ def find_new_solution(
             remaining = [p for p in PIECE_IDS if p not in fixed_pieces]
 
             solution_cells = _find_solution_for_state(
-                working_cells,
-                remaining,
-                valid_cells,
-                fixed_pieces,
-                accept,
+                working_cells, remaining, valid_cells, fixed_pieces, accept,
             )
             if solution_cells is None:
                 continue
 
             yass_solution = build_yass(solution_cells, original_cells)
-            # Single, final write: reuses the exact same validation/normalize
-            # logic as accept() above, just recorded this time.
-            is_valid, is_new, _, _ = handle_solution(shape_id, yass_solution, check_only=True)
-            if is_valid and is_new:
-                placements = extract_placements(solution_cells)
-                return yass_solution, placements, removal_key
-            # Vanishingly unlikely (accept() already screened this exact
-            # candidate against known_solutions moments ago), but if the
-            # solutions file changed concurrently, don't hand back a stale
-            # duplicate — keep searching.
-            continue
+            placements = extract_placements(solution_cells)
+            return yass_solution, placements, removal_key
 
     return None
 
@@ -376,9 +341,9 @@ def get_next_hint_piece(
     return None
 
 
-def compute_hint(grid_state: str, shape_id: str) -> Dict:
+def compute_hint(grid_state: str, shape_id: str, known_solutions: Optional[Set[str]] = None) -> Dict:
     """Compute a hint for the current puzzle state."""
-    result = find_new_solution(grid_state, shape_id)
+    result = find_new_solution(grid_state, shape_id, known_solutions or set())
     if result is None:
         return {
             'success': False,
