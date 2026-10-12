@@ -105,7 +105,7 @@ export class PieceManager {
 
     highlightPanel(pieceId, highlight) {
         const el = document.getElementById(`panel-${pieceId}`);
-        if (el) el.style.background = highlight ? '#e0e0e0' : '';
+        if (el) el.classList.toggle('is-selected', highlight);
     }
 
     movePiece(axis, direction) {

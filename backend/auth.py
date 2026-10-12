@@ -177,17 +177,31 @@ def check_email_exists(email: str) -> Optional[bool]:
     if not Config.SUPABASE_URL or not Config.SUPABASE_SERVICE_ROLE_KEY:
         logger.error("check_email_exists: SUPABASE_SERVICE_ROLE_KEY is not configured")
         return None
+    target = (email or "").strip().lower()
+    if not target:
+        return None
+    per_page = 200
+    max_pages = 25   # scans up to 5,000 accounts; beyond that we answer "unknown"
     try:
-        query = urllib.parse.urlencode({"email": email})
-        url = f"{Config.SUPABASE_URL}/auth/v1/admin/users?{query}"
-        req = urllib.request.Request(url, headers={
-            "apikey": Config.SUPABASE_SERVICE_ROLE_KEY,
-            "Authorization": f"Bearer {Config.SUPABASE_SERVICE_ROLE_KEY}",
-        })
-        with urllib.request.urlopen(req, timeout=5, context=_SSL_CONTEXT) as resp:
-            body = json.loads(resp.read().decode("utf-8"))
-        users = body.get("users", [])
-        return len(users) > 0
+        # The Admin "list users" endpoint has no exact-email lookup (an unknown
+        # `email` query parameter is not a filter), so asking it for one email
+        # can return everyone and make every address look registered. Page
+        # through the list and compare the addresses ourselves instead.
+        for page in range(1, max_pages + 1):
+            query = urllib.parse.urlencode({"page": page, "per_page": per_page})
+            url = f"{Config.SUPABASE_URL}/auth/v1/admin/users?{query}"
+            req = urllib.request.Request(url, headers={
+                "apikey": Config.SUPABASE_SERVICE_ROLE_KEY,
+                "Authorization": f"Bearer {Config.SUPABASE_SERVICE_ROLE_KEY}",
+            })
+            with urllib.request.urlopen(req, timeout=5, context=_SSL_CONTEXT) as resp:
+                body = json.loads(resp.read().decode("utf-8"))
+            users = body.get("users", [])
+            if any((u.get("email") or "").lower() == target for u in users):
+                return True
+            if len(users) < per_page:
+                return False          # reached the last page without a match
+        return None                   # too many users to scan: unknown
     except Exception as e:
         logger.error(f"check_email_exists failed: {e}")
         return None

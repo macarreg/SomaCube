@@ -2,6 +2,27 @@ import { getSupabaseClient } from './supabaseClient.js';
 
 const BUTTON_COOLDOWN_MS = 30000;
 const USERNAME_RE = /^[a-zA-Z0-9_]{3,20}$/;
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const MIN_PASSWORD_LENGTH = 6;   // keep in sync with Supabase > Auth > Password policy
+
+// Where Supabase sends people after they click a link in a confirmation or
+// password-reset email. This URL must be listed under Supabase > Authentication
+// > URL Configuration > Redirect URLs, or Supabase silently falls back to the
+// Site URL. The Flask app serves index.html at this path (see app.py).
+const AUTH_REDIRECT_URL = `${window.location.origin}/auth/callback`;
+
+// Supabase puts the outcome of an email link in the URL #fragment, e.g.
+//   #access_token=...&type=recovery
+//   #error=access_denied&error_code=otp_expired&error_description=...
+// The client library strips the fragment while it initialises, so we read it
+// first (this runs before the client exists).
+function readAuthRedirect() {
+    const params = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+    return {
+        isRecovery: params.get('type') === 'recovery',
+        errorCode: params.get('error_code'),
+    };
+}
 
 export class AuthController {
     constructor() {
@@ -10,57 +31,74 @@ export class AuthController {
         this.onChange = null;
         this.username = null;
         this.profileLoaded = false;
+        this.redirect = readAuthRedirect();
     }
 
     async init(onChange) {
         this.onChange = onChange;
         this.supabase = await getSupabaseClient();
 
+        // Wire the UI before subscribing so no auth event can arrive early.
+        this._wireForm();
+        this._wireResetDialog();
+
+        // NOTE: don't await Supabase calls inside this callback (it can
+        // deadlock the client); it only touches the DOM and our own backend.
+        this.supabase.auth.onAuthStateChange((event, session) => {
+            this.session = session;
+            this._render();
+            this._loadProfile();
+            this.onChange?.();
+            if (event === 'PASSWORD_RECOVERY') this._openResetDialog();
+        });
+
         const { data: { session } } = await this.supabase.auth.getSession();
         this.session = session;
         this._render();
         this._loadProfile();
 
-        this.supabase.auth.onAuthStateChange(async (event, session) => {
-            this.session = session;
-            this._render();
-            this._loadProfile();
-            this.onChange?.();
-        
-            if (event === 'PASSWORD_RECOVERY') {
-                const pw = window.prompt('Enter your new password (min 6 characters):');
-                if (pw) {
-                    const { error } = await this.supabase.auth.updateUser({ password: pw });
-                    alert(error ? error.message : 'Password updated!');
-                }
-            }
-        });
+        // PASSWORD_RECOVERY can fire while the client initialises, before the
+        // listener above exists, so the URL fragment is the reliable signal.
+        if (this.redirect.isRecovery && session) {
+            this._openResetDialog();
+        } else if (this.redirect.errorCode) {
+            this._setStatus('That link has expired or was already used. Enter your email and choose "Forgot password?" to get a new one.');
+        }
 
-        this._wireForm();
+        if (window.location.pathname.startsWith('/auth/')) {
+            window.history.replaceState(null, '', '/');
+        }
     }
 
     getAccessToken() {
         return this.session?.access_token || null;
     }
 
+    // ---- small helpers ---------------------------------------------------
+
+    _setStatus(text, tone = 'error') {
+        const el = document.getElementById('auth-status');
+        if (!el) return;
+        el.dataset.tone = tone;
+        el.textContent = text;
+    }
+
+    _toast(text) {
+        window.uiController?.showMessage(text);
+    }
+
     // Disables a button immediately (so a double-click can't fire a second
-    // request) and re-enables it after BUTTON_COOLDOWN_MS. This never delays
-    // when a status message appears — that still happens as soon as the
-    // network call resolves.
+    // request) and re-enables it after BUTTON_COOLDOWN_MS.
     _startCooldown(button, ms = BUTTON_COOLDOWN_MS) {
         if (!button) return;
         button.disabled = true;
-        setTimeout(() => {
-            button.disabled = false;
-        }, ms);
+        setTimeout(() => { button.disabled = false; }, ms);
     }
 
-    // Asks our own backend (not Supabase directly) whether an account with
-    // this email exists, so a failed login can say "no account" vs "wrong
-    // password" instead of Supabase's deliberately generic error. Returns
-    // true/false, or null if it couldn't be determined (backend not
-    // configured, network error, rate-limited, etc.) — callers must treat
-    // null as "unknown", never as a definitive answer.
+    // Asks our own backend whether an account with this email exists, so a
+    // failed login can say "no account" vs "wrong password". Returns
+    // true/false, or null if it couldn't be determined; callers must treat
+    // null as "unknown".
     async _checkEmailExists(email) {
         try {
             const res = await fetch('/api/auth/check-email', {
@@ -90,7 +128,7 @@ export class AuthController {
             return { available: null, message: 'Could not check that username right now.' };
         }
     }
-    
+
     async _loadProfile() {
         this.username = null;
         this.profileLoaded = false;
@@ -106,7 +144,7 @@ export class AuthController {
         }
         this._renderUsername();
     }
-    
+
     _renderUsername() {
         const label = document.getElementById('auth-user-email');
         const prompt = document.getElementById('auth-username-prompt');
@@ -115,6 +153,90 @@ export class AuthController {
         label.textContent = this.username || this.session.user.email;
         prompt.hidden = !(this.profileLoaded && !this.username);
     }
+
+    // ---- password reset ---------------------------------------------------
+
+    // Step 1: ask Supabase to email a reset link.
+    async _sendResetEmail(email, button) {
+        if (!EMAIL_RE.test(email)) {
+            this._setStatus('Enter your email address above, then choose "Forgot password?".');
+            return;
+        }
+        this._startCooldown(button);
+        this._setStatus('Sending reset email…', 'info');
+
+        // supabase-js reads `redirectTo` here. (`emailRedirectTo` is the name
+        // used by signUp, and is silently ignored by resetPasswordForEmail.)
+        const { error } = await this.supabase.auth.resetPasswordForEmail(email, {
+            redirectTo: AUTH_REDIRECT_URL,
+        });
+
+        if (error) {
+            console.error('resetPasswordForEmail failed:', error);
+            if (error.status === 429 || error.code === 'over_email_send_rate_limit') {
+                this._setStatus('Too many reset emails requested. Please wait a few minutes and try again.');
+            } else {
+                this._setStatus('We could not send the reset email. Please try again later.');
+            }
+            return;
+        }
+        // Supabase answers the same way whether or not the address has an
+        // account, so say it the same way too.
+        this._setStatus('If an account exists for that email, a reset link is on its way. Check your spam folder too.', 'ok');
+    }
+
+    // Step 2: the person clicked the link, so Supabase gave us a temporary
+    // session. Ask for the new password in a dialog.
+    _openResetDialog() {
+        const dialog = document.getElementById('reset-dialog');
+        if (!dialog || dialog.open) return;
+        document.getElementById('reset-error').textContent = '';
+        dialog.showModal();
+        document.getElementById('reset-password')?.focus();
+    }
+
+    _wireResetDialog() {
+        const dialog = document.getElementById('reset-dialog');
+        const form = document.getElementById('reset-form');
+        if (!dialog || !form) return;
+
+        const password = document.getElementById('reset-password');
+        const confirm = document.getElementById('reset-password-confirm');
+        const errorEl = document.getElementById('reset-error');
+        const submit = document.getElementById('reset-submit');
+        const cancel = document.getElementById('reset-cancel');
+
+        const close = () => { dialog.close(); form.reset(); errorEl.textContent = ''; };
+
+        form.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            errorEl.textContent = '';
+
+            if (password.value.length < MIN_PASSWORD_LENGTH) {
+                errorEl.textContent = `Use at least ${MIN_PASSWORD_LENGTH} characters.`;
+                return;
+            }
+            if (password.value !== confirm.value) {
+                errorEl.textContent = 'The two passwords do not match.';
+                return;
+            }
+
+            submit.disabled = true;
+            const { error } = await this.supabase.auth.updateUser({ password: password.value });
+            submit.disabled = false;
+
+            if (error) {
+                errorEl.textContent = error.message;
+                return;
+            }
+            close();
+            this._toast('Password updated. You are logged in.');
+        });
+
+        cancel?.addEventListener('click', close);
+    }
+
+    // ---- forms --------------------------------------------------------------
 
     _wireForm() {
         const emailInput = document.getElementById('auth-email');
@@ -127,48 +249,56 @@ export class AuthController {
         const signupBtn = document.getElementById('auth-signup');
         const loginBtn = document.getElementById('auth-login');
         const logoutBtn = document.getElementById('auth-logout');
+        const forgotBtn = document.getElementById('auth-forgot');
+
+        forgotBtn?.addEventListener('click', () => {
+            this._sendResetEmail(emailInput.value.trim(), forgotBtn);
+        });
 
         signupBtn?.addEventListener('click', async () => {
-            statusEl.textContent = '';
-        
+            this._setStatus('');
+
             // First click just reveals the username field.
             if (usernameInput.hidden) {
                 usernameInput.hidden = false;
                 usernameInput.focus();
-                statusEl.textContent = 'Choose a username, then click Sign Up again.';
+                this._setStatus('Choose a username, then click Sign Up again.', 'info');
                 return;
             }
-        
+
             const username = usernameInput.value.trim();
             if (!USERNAME_RE.test(username)) {
-                statusEl.textContent = 'Username must be 3–20 letters, numbers, or underscores.';
+                this._setStatus('Username must be 3–20 letters, numbers, or underscores.');
                 return;
             }
-        
+
             signupBtn.disabled = true;   // block double-clicks while we check
             const check = await this._checkUsernameAvailable(username);
             if (check.available !== true) {
                 signupBtn.disabled = false;
-                statusEl.textContent = check.message || 'That username is taken.';
+                this._setStatus(check.message || 'That username is taken.');
                 return;
             }
-        
+
             this._startCooldown(signupBtn);   // cooldown starts only once we really sign up
             const email = emailInput.value.trim();
-        
+
+            // `emailRedirectTo` belongs inside `options` for signUp.
             const { data, error } = await this.supabase.auth.signUp({
                 email,
                 password: passwordInput.value,
-                options: { data: { username } },
-                emailRedirectTo: `${window.location.origin}/auth/callback`,
+                options: {
+                    data: { username },
+                    emailRedirectTo: AUTH_REDIRECT_URL,
+                },
             });
-        
+
             if (error) {
-                statusEl.textContent = error.message;
+                this._setStatus(error.message);
             } else if (data?.user?.identities?.length === 0) {
-                statusEl.textContent = 'This email is already registered. Try logging in instead.';
+                this._setStatus('This email is already registered. Try logging in instead.');
             } else {
-                statusEl.textContent = 'Check your email to confirm your account.';
+                this._setStatus('Check your email to confirm your account.', 'ok');
             }
         });
 
@@ -206,7 +336,7 @@ export class AuthController {
 
         loginBtn?.addEventListener('click', async () => {
             this._startCooldown(loginBtn);
-            statusEl.textContent = '';
+            this._setStatus('');
             statusEl.replaceChildren();
 
             const email = emailInput.value.trim();
@@ -214,36 +344,30 @@ export class AuthController {
 
             const { error } = await this.supabase.auth.signInWithPassword({ email, password });
             if (!error) {
-                statusEl.textContent = '';
+                this._setStatus('');
                 return; // onAuthStateChange handles re-rendering as logged in
             }
 
-            // Supabase's signInWithPassword deliberately returns the same
-            // generic error whether the email doesn't exist or the password
-            // is wrong, to avoid revealing which emails have accounts. We
-            // check separately to give a more specific message, which
-            // reverses that protection — a deliberate choice made here, not
-            // Supabase's default.
+            // Supabase returns the same generic error for "no such email" and
+            // "wrong password". We ask our backend which it was, which is a
+            // deliberate trade-off (it reveals whether an email has an account).
             const exists = await this._checkEmailExists(email);
 
             if (exists === false) {
-                statusEl.textContent = 'No account found with that email.';
+                this._setStatus('No account found with that email.');
             } else if (exists === true) {
                 const msg = document.createTextNode('Incorrect password. ');
                 const resetBtn = document.createElement('button');
                 resetBtn.type = 'button';
+                resetBtn.className = 'link-button';
                 resetBtn.textContent = 'Send password reset email';
-                resetBtn.addEventListener('click', async () => {
-                    this._startCooldown(resetBtn);
-                    const { error: resetErr } = await this.supabase.auth.resetPasswordForEmail(email, {emailRedirectTo: `${window.location.origin}/auth/callback`});
-                    statusEl.textContent = resetErr ? resetErr.message : 'Password reset email sent — check your inbox.';
-                });
+                resetBtn.addEventListener('click', () => this._sendResetEmail(email, resetBtn));
+                statusEl.dataset.tone = 'error';
                 statusEl.replaceChildren(msg, resetBtn);
             } else {
-                // Couldn't determine either way (service role key not
-                // configured, network error, rate-limited) — fall back to
-                // Supabase's own generic message rather than guessing.
-                statusEl.textContent = error.message;
+                // Couldn't tell; fall back to Supabase's own message. The
+                // always-visible "Forgot password?" button still works.
+                this._setStatus(error.message);
             }
         });
 
@@ -258,15 +382,15 @@ export class AuthController {
         const loggedIn = document.getElementById('auth-logged-in');
         if (!loggedOut || !loggedIn) return;
 
+        // Toggle the `hidden` attribute (not inline display styles) so the
+        // stylesheet's responsive layouts keep working.
+        loggedOut.hidden = !!this.session;
+        loggedIn.hidden = !this.session;
+
         if (this.session) {
-            loggedOut.style.display = 'none';
-            loggedIn.style.display = 'flex';
             document.getElementById('auth-user-email').textContent = this.session.user.email;
             const u = document.getElementById('auth-username');
             if (u) { u.hidden = true; u.value = ''; }
-        } else {
-            loggedOut.style.display = 'flex';
-            loggedIn.style.display = 'none';
         }
     }
 }

@@ -1,53 +1,74 @@
 /* =========================================================
    SOMA Cube Solver
    Main application stylesheet
+   ---------------------------------------------------------
+   Look: a cool paper-grey workspace with ink-navy text and one
+   indigo accent. The colour comes from the puzzle pieces
+   themselves (the logo and the piece list), and the 3D stage
+   sits on a dotted grid like drafting paper.
    ========================================================= */
 
 
 /* =========================================================
-   1. Design variables
+   1. Design tokens
    ========================================================= */
 
    :root {
-    --color-background: #f4f6f8;
+    --color-background: #eaeef5;
     --color-surface: #ffffff;
-    --color-surface-soft: #f8fafc;
+    --color-surface-soft: #f4f6fb;
+    --color-surface-hover: #ebeff7;
 
-    --color-primary: #2563eb;
-    --color-primary-hover: #1d4ed8;
+    --color-primary: #3b4de0;
+    --color-primary-hover: #2f3fc4;
+    --color-primary-tint: rgba(59, 77, 224, 0.1);
 
-    --color-accent: #16a34a;
-    --color-accent-hover: #15803d;
+    --color-accent: #0e9f6e;
+    --color-accent-hover: #0b8559;
 
-    --color-text: #1f2937;
-    --color-text-secondary: #6b7280;
-    --color-text-muted: #9ca3af;
+    --color-text: #131c33;
+    --color-text-secondary: #526079;
+    --color-text-muted: #8791a8;
 
-    --color-border: #e5e7eb;
-    --color-border-dark: #d1d5db;
+    --color-border: #dce2ee;
+    --color-border-dark: #c7cfdf;
 
-    --color-danger: #dc2626;
+    --color-danger: #c8344a;
+    --color-success: #0b7a56;
+    --color-info: #526079;
 
-    --radius-small: 6px;
-    --radius-medium: 10px;
-    --radius-large: 14px;
+    /* Different jobs get different corner sizes */
+    --radius-small: 8px;     /* inputs, small controls */
+    --radius-medium: 12px;   /* buttons, bars */
+    --radius-large: 18px;    /* main panels */
+    --radius-pill: 999px;
 
-    --shadow-small:
-        0 1px 3px rgba(0, 0, 0, 0.08);
+    --shadow-small: 0 1px 2px rgba(19, 28, 51, 0.06);
+    --shadow-medium: 0 8px 24px -8px rgba(19, 28, 51, 0.18);
+    --shadow-dialog: 0 24px 60px -12px rgba(19, 28, 51, 0.45);
 
-    --shadow-medium:
-        0 4px 12px rgba(0, 0, 0, 0.08);
+    --font-display: "Bricolage Grotesque", "DM Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --font-body: "DM Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 
     --spacing-xs: 4px;
     --spacing-sm: 8px;
     --spacing-md: 16px;
     --spacing-lg: 24px;
     --spacing-xl: 32px;
+
+    /* the seven piece colours, softened for UI use */
+    --piece-1: #ef4444;
+    --piece-2: #22c55e;
+    --piece-3: #3b82f6;
+    --piece-4: #facc15;
+    --piece-5: #d946ef;
+    --piece-6: #06b6d4;
+    --piece-7: #f97316;
 }
 
 
 /* =========================================================
-   2. Reset
+   2. Reset and base
    ========================================================= */
 
 * {
@@ -56,11 +77,40 @@
     padding: 0;
 }
 
+[hidden] {
+    display: none !important;
+}
+
 html,
 body {
     width: 100%;
     height: 100%;
     overflow: hidden;       /* desktop: never scroll */
+}
+
+body {
+    font-family: var(--font-body);
+    font-size: 15px;
+    line-height: 1.45;
+    color: var(--color-text);
+    background: var(--color-background);
+    -webkit-font-smoothing: antialiased;
+}
+
+h1, h2 {
+    font-family: var(--font-display);
+    letter-spacing: -0.01em;
+}
+
+button,
+input,
+select {
+    font: inherit;
+}
+
+:focus-visible {
+    outline: 3px solid rgba(59, 77, 224, 0.35);
+    outline-offset: 2px;
 }
 
 
@@ -75,19 +125,18 @@ body {
     display: grid;
     grid-template-rows:
         auto                /* header */
-        auto                /* tabs */
         auto                /* controls */
-        minmax(0, 1fr)      /* workspace: */
+        minmax(0, 1fr)      /* workspace (takes the spare height) */
         auto;               /* bottom panel */
 
-    gap: var(--spacing-md);
-    padding: var(--spacing-md);
+    gap: 14px;
+    padding: 14px;
     overflow: hidden;
 }
 
 /* Leaderboard view: hide the puzzle UI, let the board fill the space */
 .app--leaderboard {
-    grid-template-rows: auto auto minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
 }
 
 .app--leaderboard .controls,
@@ -96,6 +145,7 @@ body {
     display: none;
 }
 
+
 /* =========================================================
    4. Header
    ========================================================= */
@@ -103,32 +153,57 @@ body {
 .app-header {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: var(--spacing-sm) var(--spacing-lg);
 
-    gap: var(--spacing-lg);
-
-    padding:
-        var(--spacing-md)
-        var(--spacing-lg);
+    padding: 12px var(--spacing-lg);
 
     background: var(--color-surface);
-
     border: 1px solid var(--color-border);
     border-radius: var(--radius-large);
-
     box-shadow: var(--shadow-small);
 }
 
+.brand {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+/* Logo: nine cells in the seven piece colours */
+.brand-mark {
+    display: grid;
+    grid-template-columns: repeat(3, 10px);
+    grid-template-rows: repeat(3, 10px);
+    gap: 3px;
+    flex-shrink: 0;
+}
+
+.brand-mark span {
+    border-radius: 3px;
+    box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.16);
+}
+
+.brand-mark span:nth-child(1) { background: var(--piece-1); }
+.brand-mark span:nth-child(2) { background: var(--piece-4); }
+.brand-mark span:nth-child(3) { background: var(--piece-3); }
+.brand-mark span:nth-child(4) { background: var(--piece-2); }
+.brand-mark span:nth-child(5) { background: var(--piece-5); }
+.brand-mark span:nth-child(6) { background: var(--piece-7); }
+.brand-mark span:nth-child(7) { background: var(--piece-6); }
+.brand-mark span:nth-child(8),
+.brand-mark span:nth-child(9) { background: var(--color-border); box-shadow: none; }
+
 .header-title h1 {
-    font-size: clamp(1.4rem, 2vw, 1.9rem);
-    line-height: 1.2;
+    font-size: 1.35rem;
+    font-weight: 700;
+    line-height: 1.15;
 }
 
 .header-title p {
-    margin-top: 4px;
-
+    margin-top: 2px;
     color: var(--color-text-secondary);
-    font-size: 0.9rem;
+    font-size: 0.82rem;
 }
 
 
@@ -139,6 +214,7 @@ body {
 .auth-panel {
     display: flex;
     align-items: center;
+    margin-left: auto;
 }
 
 .auth-logged-out,
@@ -151,38 +227,37 @@ body {
     gap: var(--spacing-sm);
 }
 
-.auth-logged-in {
-    display: none;
+#auth-user-email {
+    font-weight: 600;
+    font-size: 0.9rem;
 }
 
 .auth-logged-out input,
 .auth-username-prompt input {
     width: 150px;
+    padding: 9px 12px;
 
-    padding: 9px 11px;
-
-    font: inherit;
     font-size: 0.9rem;
-
     color: var(--color-text);
-    background: var(--color-surface);
+    background: var(--color-surface-soft);
 
-    border: 1px solid var(--color-border-dark);
+    border: 1px solid var(--color-border);
     border-radius: var(--radius-small);
-
     outline: none;
 
-    transition:
-        border-color 0.2s ease,
-        box-shadow 0.2s ease;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+}
+
+.auth-logged-out input::placeholder,
+.auth-username-prompt input::placeholder {
+    color: var(--color-text-muted);
 }
 
 .auth-logged-out input:focus,
 .auth-username-prompt input:focus {
+    background: var(--color-surface);
     border-color: var(--color-primary);
-
-    box-shadow:
-        0 0 0 3px rgba(37, 99, 235, 0.12);
+    box-shadow: 0 0 0 3px var(--color-primary-tint);
 }
 
 #auth-status,
@@ -191,80 +266,160 @@ body {
     font-size: 0.8rem;
 }
 
+#auth-status {
+    flex-basis: 100%;
+    text-align: right;
+}
+
+#auth-status[data-tone="ok"]   { color: var(--color-success); }
+#auth-status[data-tone="info"] { color: var(--color-info); }
+
+#auth-status:empty {
+    display: none;
+}
+
 .auth-username-prompt:not([hidden]) {
     display: inline-flex;
     align-items: center;
     gap: var(--spacing-sm);
 }
 
+/* Text-style button, used for "Forgot password?" and the reset prompt */
+.link-button {
+    padding: 4px 2px;
+
+    color: var(--color-primary);
+    background: none;
+    border: none;
+
+    font-size: inherit;
+    font-weight: 600;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    cursor: pointer;
+}
+
+#auth-forgot {
+    font-size: 0.82rem;
+}
+
+.link-button:hover {
+    color: var(--color-primary-hover);
+}
+
+.link-button:disabled {
+    color: var(--color-text-muted);
+    cursor: not-allowed;
+    text-decoration: none;
+}
+
 
 /* =========================================================
-   6. Buttons
+   6. Tabs
    ========================================================= */
 
-.button {
-    border: none;
-    border-radius: var(--radius-small);
+.tabs {
+    display: flex;
+    gap: 2px;
+    width: fit-content;
+    padding: 3px;
 
-    padding: 9px 14px;
+    background: var(--color-surface-soft);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-pill);
+}
 
-    font: inherit;
-    font-size: 0.9rem;
+.tab {
+    padding: 7px 16px;
+
+    font-size: 0.88rem;
     font-weight: 600;
+    color: var(--color-text-secondary);
 
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-pill);
     cursor: pointer;
 
-    transition:
-        background-color 0.2s ease,
-        transform 0.1s ease,
-        box-shadow 0.2s ease;
+    transition: background-color 0.15s ease, color 0.15s ease;
 }
 
-.button:hover {
-    transform: translateY(-1px);
+.tab:hover {
+    color: var(--color-text);
+    background: var(--color-surface-hover);
 }
 
-.button:active {
-    transform: translateY(0);
-}
-
-.button:focus-visible {
-    outline: 3px solid rgba(37, 99, 235, 0.25);
-    outline-offset: 2px;
-}
-
-.button-primary {
-    color: white;
+.tab[aria-selected="true"],
+.tab[aria-selected="true"]:hover {
+    color: #fff;
     background: var(--color-primary);
 }
 
-.button-primary:hover {
+
+/* =========================================================
+   7. Buttons
+   ========================================================= */
+
+.button {
+    padding: 9px 16px;
+
+    border: 1px solid transparent;
+    border-radius: var(--radius-medium);
+
+    font-size: 0.9rem;
+    font-weight: 600;
+    line-height: 1.2;
+    cursor: pointer;
+
+    transition: background-color 0.15s ease, border-color 0.15s ease,
+                box-shadow 0.15s ease, transform 0.1s ease;
+}
+
+.button:active {
+    transform: translateY(1px);
+}
+
+.button:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.button-primary {
+    color: #fff;
+    background: var(--color-primary);
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.18) inset,
+                0 4px 10px -4px rgba(59, 77, 224, 0.55);
+}
+
+.button-primary:hover:not(:disabled) {
     background: var(--color-primary-hover);
 }
 
 .button-accent {
-    color: white;
+    color: #fff;
     background: var(--color-accent);
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.18) inset,
+                0 4px 10px -4px rgba(14, 159, 110, 0.55);
 }
 
-.button-accent:hover {
+.button-accent:hover:not(:disabled) {
     background: var(--color-accent-hover);
 }
 
 .button-secondary {
     color: var(--color-text);
-    background: var(--color-surface-soft);
-
-    border: 1px solid var(--color-border-dark);
+    background: var(--color-surface);
+    border-color: var(--color-border-dark);
 }
 
-.button-secondary:hover {
-    background: #eef1f4;
+.button-secondary:hover:not(:disabled) {
+    background: var(--color-surface-hover);
 }
 
 
 /* =========================================================
-   7. Main controls
+   8. Main controls bar
    ========================================================= */
 
 .controls {
@@ -272,24 +427,16 @@ body {
     align-items: center;
 
     flex-wrap: wrap;
-    gap: var(--spacing-md);
+    gap: var(--spacing-sm) var(--spacing-md);
 
-    padding:
-        var(--spacing-sm)
-        var(--spacing-md);
+    padding: 8px 12px;
 
     background: var(--color-surface);
-
     border: 1px solid var(--color-border);
     border-radius: var(--radius-medium);
-
     box-shadow: var(--shadow-small);
 
-    /*
-     * Your JavaScript can still change visibility.
-     * This is the replacement for the inline style
-     * that was previously on the element.
-     */
+    /* JavaScript reveals this once the UI is ready. */
     visibility: hidden;
 }
 
@@ -301,23 +448,10 @@ body {
     gap: var(--spacing-sm);
 }
 
-
-/* =========================================================
-   8. Shape selector
-   ========================================================= */
-
 .shape-selector {
     display: flex;
     align-items: center;
-
     gap: var(--spacing-sm);
-
-    padding: 5px 8px;
-
-    background: var(--color-surface-soft);
-
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-small);
 }
 
 .shape-selector label {
@@ -326,21 +460,16 @@ body {
     color: var(--color-text-secondary);
 }
 
-.shape-selector select {
-    min-width: 120px;
-
-    padding: 7px 28px 7px 9px;
-
-    font: inherit;
-    font-size: 0.9rem;
+.shape-selector select,
+.leaderboard-toolbar select {
+    min-width: 150px;
+    padding: 8px 30px 8px 12px;
 
     color: var(--color-text);
-
-    background: var(--color-surface);
+    background-color: var(--color-surface-soft);
 
     border: 1px solid var(--color-border-dark);
     border-radius: var(--radius-small);
-
     cursor: pointer;
 }
 
@@ -353,17 +482,13 @@ body {
     min-height: 0;
 
     display: grid;
-
-    grid-template-columns:
-        minmax(180px, 220px)
-        minmax(0, 1fr);
-
-    gap: var(--spacing-md);
+    grid-template-columns: minmax(180px, 220px) minmax(0, 1fr);
+    gap: 14px;
 }
 
 
 /* =========================================================
-   10. Available pieces panel
+   10. Available pieces
    ========================================================= */
 
 .pieces-panel {
@@ -375,120 +500,104 @@ body {
     padding: var(--spacing-md);
 
     background: var(--color-surface);
-
     border: 1px solid var(--color-border);
     border-radius: var(--radius-large);
-
     box-shadow: var(--shadow-small);
 
     overflow: hidden;
 }
 
 .panel-header {
-    margin-bottom: var(--spacing-md);
+    margin-bottom: 12px;
 }
 
 .panel-header h2 {
-    font-size: 1rem;
+    font-size: 1.02rem;
+    font-weight: 700;
 }
 
 .panel-subtitle {
     display: block;
-
-    margin-top: 3px;
+    margin-top: 2px;
 
     color: var(--color-text-muted);
-    font-size: 0.75rem;
+    font-size: 0.76rem;
 }
 
 .pieces-container {
     min-height: 0;
-
     overflow-y: auto;
 
     display: flex;
     flex-direction: column;
-
-    gap: var(--spacing-sm);
+    gap: 6px;
 }
-
-
-/* =========================================================
-   11. Individual pieces
-   ========================================================= */
 
 .piece-item {
     display: flex;
     align-items: center;
+    gap: 12px;
 
-    gap: var(--spacing-sm);
-
-    padding: 10px;
+    padding: 8px 10px;
 
     background: var(--color-surface-soft);
-
     border: 1px solid transparent;
-    border-radius: var(--radius-small);
-
+    border-radius: var(--radius-medium);
     cursor: pointer;
 
-    transition:
-        background-color 0.2s ease,
-        border-color 0.2s ease,
-        transform 0.2s ease;
+    transition: background-color 0.15s ease, border-color 0.15s ease;
 }
 
 .piece-item:hover {
-    background: #eef2f7;
-
+    background: var(--color-surface-hover);
     border-color: var(--color-border-dark);
-
-    transform: translateX(2px);
 }
 
-.piece-preview {
-    width: 30px;
-    height: 30px;
+/* Set from JavaScript when the piece is the selected one */
+.piece-item.is-selected {
+    background: var(--color-primary-tint);
+    border-color: var(--color-primary);
+}
 
+/* Each swatch reads as a little block: lit top edge, shaded underside */
+.piece-preview {
+    width: 28px;
+    height: 28px;
     flex-shrink: 0;
 
-    border-radius: var(--radius-small);
-
-    box-shadow: var(--shadow-small);
+    border-radius: 7px;
+    box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.4),
+                inset 0 -4px 0 rgba(0, 0, 0, 0.2);
 }
 
 .piece-item span {
-    font-size: 0.85rem;
-    color: var(--color-text);
+    font-size: 0.88rem;
+    font-weight: 500;
 }
 
 
 /* =========================================================
-   12. Three.js canvas
+   11. Three.js stage
    ========================================================= */
 
-   .canvas-container {
+.canvas-container {
     position: relative;
 
     min-width: 0;
     min-height: 0;
-
     overflow: hidden;
 
     display: flex;
     align-items: center;
     justify-content: center;
 
-    background:
-        radial-gradient(
-            circle at center,
-            #ffffff 0%,
-            #f1f4f7 100%
-        );
+    /* dotted drafting grid; the canvas itself is transparent */
+    background-color: #fbfcfe;
+    background-image: radial-gradient(circle, #c3cbdd 1px, transparent 1.3px);
+    background-size: 22px 22px;
 
     border: 1px solid var(--color-border);
     border-radius: var(--radius-large);
-
     box-shadow: var(--shadow-medium);
 }
 
@@ -502,21 +611,21 @@ body {
 
 
 /* =========================================================
-   13. Bottom panel (status + controls)
+   12. Bottom panel (status + key help)
    ========================================================= */
 
-   .bottom-panel {
+.bottom-panel {
     display: flex;
     align-items: center;
     justify-content: space-between;
     flex-wrap: wrap;
     gap: var(--spacing-md);
 
-    padding: var(--spacing-sm) var(--spacing-md);
+    padding: 8px 12px;
 
     background: var(--color-surface);
     border: 1px solid var(--color-border);
-    border-radius: var(--radius-large);
+    border-radius: var(--radius-medium);
     box-shadow: var(--shadow-small);
 }
 
@@ -529,13 +638,13 @@ body {
 .status-card {
     display: flex;
     align-items: center;
-    gap: var(--spacing-sm);
+    gap: 10px;
 
-    padding: 6px 12px;
+    padding: 6px 14px;
 
     background: var(--color-surface-soft);
     border: 1px solid var(--color-border);
-    border-radius: var(--radius-medium);
+    border-radius: var(--radius-pill);
 
     font-size: 0.85rem;
 }
@@ -545,7 +654,9 @@ body {
 }
 
 .status-card strong {
-    font-size: 1rem;
+    font-family: var(--font-display);
+    font-size: 1.05rem;
+    font-variant-numeric: tabular-nums;
 }
 
 .status-divider {
@@ -561,7 +672,9 @@ body {
 }
 
 .instructions h2 {
+    font-family: var(--font-body);
     font-size: 0.85rem;
+    font-weight: 600;
     color: var(--color-text-secondary);
 }
 
@@ -577,46 +690,62 @@ body {
     white-space: nowrap;
 }
 
+kbd {
+    display: inline-block;
+    min-width: 22px;
+    margin-right: 3px;
+    padding: 1px 6px;
+
+    font: 600 0.74rem/1.5 var(--font-body);
+    text-align: center;
+    color: var(--color-text);
+
+    background: var(--color-surface);
+    border: 1px solid var(--color-border-dark);
+    border-bottom-width: 2px;
+    border-radius: 5px;
+}
+
 
 /* =========================================================
-   13b. On-screen controls
+   13. On-screen piece controls
    ========================================================= */
 
-   .piece-controls {
+.piece-controls {
     display: flex;
     align-items: center;
     flex-wrap: wrap;
     gap: var(--spacing-sm);
+    margin-left: auto;
 }
 
 .ctrl-group {
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: 3px;
 
     padding: 3px;
 
     background: var(--color-surface-soft);
     border: 1px solid var(--color-border);
-    border-radius: var(--radius-small);
+    border-radius: var(--radius-medium);
 }
 
 .ctrl-btn {
-    width: 36px;
-    height: 36px;
+    width: 34px;
+    height: 34px;
 
     display: inline-flex;
     align-items: center;
     justify-content: center;
     gap: 4px;
 
-    font: inherit;
     font-size: 0.8rem;
     font-weight: 700;
     color: var(--color-text);
 
     background: var(--color-surface);
-    border: 1px solid var(--color-border-dark);
+    border: 1px solid var(--color-border);
     border-radius: var(--radius-small);
 
     cursor: pointer;
@@ -624,33 +753,30 @@ body {
     -webkit-tap-highlight-color: transparent;
     -webkit-user-select: none;
     user-select: none;
+
+    transition: background-color 0.12s ease, color 0.12s ease, border-color 0.12s ease;
 }
 
 .ctrl-btn svg {
-    width: 20px;
-    height: 20px;
+    width: 18px;
+    height: 18px;
     flex-shrink: 0;
 }
 
 .ctrl-btn--wide {
     width: auto;
-    min-width: 48px;
+    min-width: 46px;
     padding: 0 8px;
 }
 
 .ctrl-btn:hover {
-    background: #eef1f4;
+    background: var(--color-surface-hover);
 }
 
 .ctrl-btn:active {
-    color: white;
+    color: #fff;
     background: var(--color-primary);
     border-color: var(--color-primary);
-}
-
-.ctrl-btn:focus-visible {
-    outline: 3px solid rgba(37, 99, 235, 0.25);
-    outline-offset: 2px;
 }
 
 /* Bigger tap targets on touch devices */
@@ -661,41 +787,8 @@ body {
 
 
 /* =========================================================
-   13c. Tabs and leaderboard
+   14. Leaderboard
    ========================================================= */
-
-   .tabs {
-    display: flex;
-    gap: var(--spacing-xs);
-    width: fit-content;
-    padding: 4px;
-
-    background: var(--color-surface);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-medium);
-    box-shadow: var(--shadow-small);
-}
-
-.tab {
-    font: inherit;
-    font-size: 0.9rem;
-    font-weight: 600;
-    padding: 8px 16px;
-
-    color: var(--color-text-secondary);
-    background: transparent;
-    border: none;
-    border-radius: var(--radius-small);
-    cursor: pointer;
-}
-
-.tab:hover { background: var(--color-surface-soft); }
-
-.tab[aria-selected="true"],
-.tab[aria-selected="true"]:hover {
-    color: white;
-    background: var(--color-primary);
-}
 
 .leaderboard {
     min-height: 0;
@@ -711,8 +804,6 @@ body {
     overflow: hidden;
 }
 
-.leaderboard[hidden] { display: none; }
-
 .leaderboard-toolbar {
     display: flex;
     align-items: center;
@@ -727,15 +818,7 @@ body {
 }
 
 .leaderboard-toolbar select {
-    min-width: 200px;
-    padding: 7px 28px 7px 9px;
-    font: inherit;
-    font-size: 0.9rem;
-    color: var(--color-text);
-    background: var(--color-surface);
-    border: 1px solid var(--color-border-dark);
-    border-radius: var(--radius-small);
-    cursor: pointer;
+    min-width: 220px;
 }
 
 .leaderboard-me {
@@ -747,8 +830,8 @@ body {
 
 .me-title {
     margin-bottom: var(--spacing-sm);
-    font-size: 0.85rem;
-    color: var(--color-text-secondary);
+    font-size: 0.95rem;
+    font-weight: 700;
 }
 
 .me-hint {
@@ -767,8 +850,8 @@ body {
     display: flex;
     flex-direction: column;
     gap: 2px;
-    min-width: 100px;
-    padding: 8px 12px;
+    min-width: 110px;
+    padding: 8px 14px;
 
     background: var(--color-surface);
     border: 1px solid var(--color-border);
@@ -776,16 +859,16 @@ body {
 }
 
 .me-stat span {
-    font-size: 0.72rem;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
+    font-size: 0.76rem;
     color: var(--color-text-muted);
 }
 
 .me-stat strong {
     display: inline-flex;
     align-items: center;
-    font-size: 1.15rem;
+    font-family: var(--font-display);
+    font-size: 1.2rem;
+    font-variant-numeric: tabular-nums;
 }
 
 .leaderboard-table-wrap {
@@ -798,12 +881,12 @@ body {
 .leaderboard-table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 0.9rem;
+    font-size: 0.92rem;
 }
 
 .leaderboard-table th,
 .leaderboard-table td {
-    padding: 9px 12px;
+    padding: 10px 14px;
     text-align: left;
     border-bottom: 1px solid var(--color-border);
 }
@@ -811,11 +894,24 @@ body {
 .leaderboard-table th {
     position: sticky;
     top: 0;
-    font-size: 0.75rem;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
+    font-size: 0.8rem;
+    font-weight: 600;
     color: var(--color-text-secondary);
     background: var(--color-surface-soft);
+}
+
+.leaderboard-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.leaderboard-table tbody tr:hover td {
+    background: var(--color-surface-soft);
+}
+
+/* Top three ranks stand out through weight alone */
+.leaderboard-table tbody tr:nth-child(-n+3) td:first-child {
+    font-weight: 700;
+    color: var(--color-primary);
 }
 
 .leaderboard-table .col-num {
@@ -825,7 +921,7 @@ body {
 
 .leaderboard-table tr.is-me td {
     font-weight: 600;
-    background: rgba(37, 99, 235, 0.08);
+    background: var(--color-primary-tint);
 }
 
 .leaderboard-table td.table-message {
@@ -845,7 +941,7 @@ body {
     font-size: 0.7rem;
     font-weight: 700;
     line-height: 1;
-    color: white;
+    color: #fff;
     background: var(--color-accent);
     border-radius: 50%;
 }
@@ -855,55 +951,146 @@ body {
     color: var(--color-text-muted);
 }
 
+
 /* =========================================================
-   14. Messages
+   15. New-password dialog
+   ========================================================= */
+
+.dialog {
+    width: min(92vw, 400px);
+    margin: auto;
+    padding: 0;
+
+    color: var(--color-text);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-large);
+    box-shadow: var(--shadow-dialog);
+}
+
+.dialog::backdrop {
+    background: rgba(19, 28, 51, 0.5);
+    backdrop-filter: blur(3px);
+}
+
+.dialog[open] {
+    animation: dialog-in 0.18s ease-out;
+}
+
+@keyframes dialog-in {
+    from { opacity: 0; transform: translateY(8px) scale(0.98); }
+    to   { opacity: 1; transform: none; }
+}
+
+.dialog-form {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: var(--spacing-lg);
+}
+
+.dialog-form h2 {
+    font-size: 1.3rem;
+}
+
+.dialog-text {
+    margin-bottom: 8px;
+    color: var(--color-text-secondary);
+    font-size: 0.9rem;
+}
+
+.dialog-form label {
+    margin-top: 6px;
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+.dialog-form input {
+    padding: 10px 12px;
+    color: var(--color-text);
+    background: var(--color-surface-soft);
+    border: 1px solid var(--color-border-dark);
+    border-radius: var(--radius-small);
+    outline: none;
+}
+
+.dialog-form input:focus {
+    background: var(--color-surface);
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px var(--color-primary-tint);
+}
+
+.dialog-error {
+    min-height: 1.2em;
+    color: var(--color-danger);
+    font-size: 0.85rem;
+}
+
+.dialog-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--spacing-sm);
+    margin-top: 6px;
+}
+
+
+/* =========================================================
+   16. Toast messages
    ========================================================= */
 
 #message {
     position: fixed;
 
     left: 50%;
-    bottom: 30px;
-
+    bottom: 28px;
     transform: translateX(-50%);
 
-    max-width: min(90vw, 500px);
+    max-width: min(90vw, 520px);
+    padding: 11px 20px;
 
-    padding: 11px 18px;
-
-    color: white;
-    background: rgba(17, 24, 39, 0.94);
-
+    color: #fff;
+    background: rgba(19, 28, 51, 0.95);
     border-radius: var(--radius-medium);
-
     box-shadow: var(--shadow-medium);
 
     font-size: 0.9rem;
     text-align: center;
 
     z-index: 1000;
-
     display: none;
+    animation: toast-in 0.2s ease-out;
+}
+
+@keyframes toast-in {
+    from { opacity: 0; transform: translate(-50%, 8px); }
+    to   { opacity: 1; transform: translate(-50%, 0); }
 }
 
 
 /* =========================================================
-   15. Medium screens
+   17. Medium screens
    ========================================================= */
+
+@media (max-width: 1100px) {
+    .piece-controls {
+        margin-left: 0;
+    }
+}
 
 @media (max-width: 900px) {
 
     .app {
         padding: var(--spacing-sm);
+        gap: 10px;
     }
 
     .app-header {
-        align-items: flex-start;
-        flex-direction: column;
+        padding: 12px var(--spacing-md);
     }
 
     .auth-panel {
         width: 100%;
+        margin-left: 0;
     }
 
     .auth-logged-out,
@@ -917,6 +1104,10 @@ body {
         min-width: 130px;
     }
 
+    #auth-status {
+        text-align: left;
+    }
+
     .workspace {
         grid-template-columns: 170px minmax(0, 1fr);
     }
@@ -925,12 +1116,11 @@ body {
         flex-direction: column;
         align-items: flex-start;
     }
-
 }
 
 
 /* =========================================================
-   16. Small screens / mobile
+   18. Small screens / mobile
    ========================================================= */
 
 @media (max-width: 700px) {
@@ -944,45 +1134,32 @@ body {
         height: auto;
         min-height: 100dvh;
         overflow: visible;
-        grid-template-rows: auto auto auto auto auto;
+        grid-template-rows: auto auto auto auto;
     }
 
-    .app {
-        height: auto;
-        min-height: 100dvh;
-        overflow: visible;
-    
-        grid-template-rows: auto auto auto auto auto;
-    }
-    
     .app--leaderboard {
-        grid-template-rows: auto auto auto;
+        grid-template-rows: auto auto;
     }
-    
+
     .leaderboard {
         overflow: visible;
     }
-    
+
     .leaderboard-toolbar select {
         flex: 1;
         min-width: 0;
     }
 
-    .app-header {
-        padding: var(--spacing-md);
-    }
-
     .header-title h1 {
-        font-size: 1.35rem;
+        font-size: 1.2rem;
     }
 
     .header-title p {
-        font-size: 0.8rem;
+        font-size: 0.78rem;
     }
 
     .auth-logged-out {
         display: grid;
-
         grid-template-columns: 1fr 1fr;
     }
 
@@ -992,8 +1169,14 @@ body {
 
     #auth-email,
     #auth-password,
-    #auth-username {
+    #auth-username,
+    #auth-forgot,
+    #auth-status {
         grid-column: span 2;
+    }
+
+    #auth-forgot {
+        justify-self: start;
     }
 
     #auth-login,
@@ -1017,9 +1200,7 @@ body {
 
     .button-group {
         display: grid;
-
         grid-template-columns: 1fr 1fr;
-
         width: 100%;
     }
 
@@ -1027,14 +1208,10 @@ body {
         width: 100%;
     }
 
-    /*
-     * Stack pieces above the 3D view on small screens.
-     */
-     .workspace {
+    /* Stack pieces above the 3D view on small screens. */
+    .workspace {
         grid-template-columns: 1fr;
-        grid-template-rows:
-            auto
-            minmax(320px, 55vh);   /* canvas gets a real, fixed height */
+        grid-template-rows: auto minmax(320px, 55vh);
     }
 
     .pieces-panel {
@@ -1043,9 +1220,7 @@ body {
 
     .pieces-container {
         display: grid;
-
-        grid-template-columns:
-            repeat(auto-fit, minmax(120px, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
     }
 
     .piece-item {
@@ -1065,12 +1240,11 @@ body {
         flex: 1;
         justify-content: center;
     }
-
 }
 
 
 /* =========================================================
-   17. Very small screens
+   19. Very small screens
    ========================================================= */
 
 @media (max-width: 420px) {
@@ -1095,4 +1269,21 @@ body {
         flex-direction: column;
     }
 
+    .status-card {
+        border-radius: var(--radius-medium);
+    }
+}
+
+
+/* =========================================================
+   20. Reduced motion
+   ========================================================= */
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation: none !important;
+        transition: none !important;
+    }
 }

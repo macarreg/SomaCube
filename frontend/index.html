@@ -16,8 +16,11 @@
         }
     </script>
 
-    <link rel="stylesheet" href="style.css">
-    <script type="module" src="js/main.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap">
+    <link rel="stylesheet" href="/style.css">
+    <script type="module" src="/js/main.js"></script>
 </head>
 
 <body>
@@ -52,9 +55,16 @@
 
         <!-- Header -->
         <header class="app-header">
-            <div class="header-title">
-                <h1>SOMA Cube Solver</h1>
-                <p>Build, solve, and explore SOMA Cube solutions.</p>
+            <div class="brand">
+                <div class="brand-mark" aria-hidden="true">
+                    <span></span><span></span><span></span>
+                    <span></span><span></span><span></span>
+                    <span></span><span></span><span></span>
+                </div>
+                <div class="header-title">
+                    <h1>SOMA Cube Solver</h1>
+                    <p>Build, solve, and explore SOMA cube solutions.</p>
+                </div>
             </div>
 
             <nav class="tabs" role="tablist" aria-label="Views">
@@ -95,10 +105,14 @@
                         Sign Up
                     </button>
 
-                    <span id="auth-status"></span>
+                    <button type="button" id="auth-forgot" class="link-button">
+                        Forgot password?
+                    </button>
+
+                    <span id="auth-status" role="status" aria-live="polite"></span>
                 </div>
 
-                <div id="auth-logged-in" class="auth-logged-in">
+                <div id="auth-logged-in" class="auth-logged-in" hidden>
                     <span id="auth-user-email"></span>
                 
                     <span id="auth-username-prompt" class="auth-username-prompt" hidden>
@@ -172,7 +186,7 @@
             <aside id="pieces-panel" class="pieces-panel">
                 <div class="panel-header">
                     <h2>Available Pieces</h2>
-                    <span class="panel-subtitle">Select a piece to place</span>
+                    <span class="panel-subtitle">Click a piece to add it to the scene</span>
                 </div>
 
                 <div id="pieces-container" class="pieces-container"></div>
@@ -230,6 +244,27 @@
         
             <p id="leaderboard-note" class="leaderboard-note" role="status"></p>
         </section>
+
+        <!-- Set a new password (opened from the reset-email link) -->
+        <dialog id="reset-dialog" class="dialog" aria-labelledby="reset-title">
+            <form id="reset-form" class="dialog-form" autocomplete="off">
+                <h2 id="reset-title">Choose a new password</h2>
+                <p class="dialog-text">You followed a reset link, so you can set a new password now.</p>
+
+                <label for="reset-password">New password</label>
+                <input type="password" id="reset-password" autocomplete="new-password" required>
+
+                <label for="reset-password-confirm">Confirm new password</label>
+                <input type="password" id="reset-password-confirm" autocomplete="new-password" required>
+
+                <p id="reset-error" class="dialog-error" role="alert"></p>
+
+                <div class="dialog-actions">
+                    <button type="button" id="reset-cancel" class="button button-secondary">Not now</button>
+                    <button type="submit" id="reset-submit" class="button button-primary">Save new password</button>
+                </div>
+            </form>
+        </dialog>
 
         <!-- Temporary messages -->
         <div id="message" role="status" aria-live="polite"></div>

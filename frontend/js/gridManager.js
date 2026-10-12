@@ -34,7 +34,7 @@ export class GridManager {
 
     createGrid() {
         this.clearGridLines();
-        const lineMaterial = new THREE.LineBasicMaterial({ color: 0x808080 });
+        const lineMaterial = new THREE.LineBasicMaterial({ color: 0x8a94ad });
         const edges = this.calculateGridEdges();
         
         edges.forEach(([start, end]) => {
@@ -128,4 +128,4 @@ export class GridManager {
         const cell = row[x];
         return cell === '*' || cell === 'o' ? cell : '*';
     }
-} 
+}

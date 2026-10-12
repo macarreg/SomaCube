@@ -16,7 +16,7 @@ export class Renderer {
         const container = document.getElementById('container');
         if (!container) return;
     
-        this.scene.background = new THREE.Color(0xf0f0f0);
+        this.scene.background = null;   // transparent: the page draws the dotted stage behind the canvas
     
         const { width, height } = this.getContainerSize();
     
@@ -27,6 +27,7 @@ export class Renderer {
         this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
         this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         this.renderer.setSize(width, height, false); // false = let CSS size the canvas
+        this.renderer.setClearColor(0x000000, 0);
         this.renderer.shadowMap.enabled = true;
     
         container.appendChild(this.renderer.domElement);
@@ -89,4 +90,4 @@ export class Renderer {
         this.controls.update();
         this.renderer.render(this.scene, this.camera);
     }
-} 
+}
