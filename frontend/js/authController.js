@@ -37,14 +37,14 @@ export class AuthController {
     async init(onChange) {
         this.onChange = onChange;
         this.supabase = await getSupabaseClient();
-    
+
         // Register BEFORE getSession so PASSWORD_RECOVERY isn't missed.
         this.supabase.auth.onAuthStateChange(async (event, session) => {
             this.session = session;
             this._render();
             this._loadProfile();
             this.onChange?.();
-    
+
             if (event === 'PASSWORD_RECOVERY') {
                 const pw = window.prompt('Enter your new password (min 6 characters):');
                 if (pw) {
@@ -53,26 +53,13 @@ export class AuthController {
                 }
             }
         });
-    
+
         const { data: { session } } = await this.supabase.auth.getSession();
         this.session = session;
         this._render();
         this._loadProfile();
-    
+
         this._wireForm();
-    }
-
-        // PASSWORD_RECOVERY can fire while the client initialises, before the
-        // listener above exists, so the URL fragment is the reliable signal.
-        if (this.redirect.isRecovery && session) {
-            this._openResetDialog();
-        } else if (this.redirect.errorCode) {
-            this._setStatus('That link has expired or was already used. Enter your email and choose "Forgot password?" to get a new one.');
-        }
-
-        if (window.location.pathname.startsWith('/auth/')) {
-            window.history.replaceState(null, '', '/');
-        }
     }
 
     getAccessToken() {
