@@ -12,6 +12,91 @@ logger = logging.getLogger(__name__)
 VALID_PIECES = {'3', 'l', 't', 'z', 'p', 'n', 'c', '.'}
 VALID_GRID_SPACES = {'*', 'o'}  # Both '*' and 'o' indicate valid grid spaces
 
+# ---------------------------------------------------------------------------
+# Rotation-invariant solution normalization
+# ---------------------------------------------------------------------------
+def _build_rotations():
+    """The 24 proper rotation matrices of the cube (no reflections)."""
+    rx = ((1, 0, 0), (0, 0, -1), (0, 1, 0))
+    ry = ((0, 0, 1), (0, 1, 0), (-1, 0, 0))
+    rz = ((0, -1, 0), (1, 0, 0), (0, 0, 1))
+    identity = ((1, 0, 0), (0, 1, 0), (0, 0, 1))
+
+    def mul(a, b):
+        return tuple(
+            tuple(sum(a[i][k] * b[k][j] for k in range(3)) for j in range(3))
+            for i in range(3)
+        )
+
+    seen, frontier = {identity}, [identity]
+    while frontier:
+        m = frontier.pop()
+        for r in (rx, ry, rz):
+            n = mul(r, m)
+            if n not in seen:
+                seen.add(n)
+                frontier.append(n)
+    return sorted(seen)
+
+_ROTATIONS = _build_rotations()
+assert len(_ROTATIONS) == 24
+
+
+def _canonical_from_cells(cells) -> str:
+    """cells: iterable of (x, y, z, piece_char). Returns the lexicographically
+    smallest 'z,y,x:piece;...' string over all 24 whole-figure rotations.
+    Piece letters move with their cells, so different piece arrangements of
+    the same occupied space remain distinct."""
+    cells = list(cells)
+    best = None
+    for m in _ROTATIONS:
+        rotated = [
+            (
+                m[0][0] * x + m[0][1] * y + m[0][2] * z,
+                m[1][0] * x + m[1][1] * y + m[1][2] * z,
+                m[2][0] * x + m[2][1] * y + m[2][2] * z,
+                c,
+            )
+            for x, y, z, c in cells
+        ]
+        mx = min(p[0] for p in rotated)
+        my = min(p[1] for p in rotated)
+        mz = min(p[2] for p in rotated)
+        candidate = sorted((z - mz, y - my, x - mx, c) for x, y, z, c in rotated)
+        if best is None or candidate < best:
+            best = candidate
+    return ";".join(f"{z},{y},{x}:{c}" for z, y, x, c in best)
+
+
+def canonicalize_string(normalized: str) -> str:
+    """Re-canonicalize an already-normalized 'z,y,x:piece;...' string
+    (e.g. one stored by the old normalizer). Idempotent."""
+    cells = []
+    for part in normalized.split(';'):
+        coords, c = part.split(':')
+        z, y, x = map(int, coords.split(','))
+        cells.append((x, y, z, c))
+    return _canonical_from_cells(cells)
+
+
+def normalize_solution(solution: str, shape_id: str) -> str:
+    """Canonical, rotation-invariant string for a solved grid."""
+    try:
+        layers = solution.strip().split('\n\n')
+        cells = [
+            (x, y, z, char)
+            for z, layer in enumerate(layers)
+            for y, row in enumerate(layer.split('\n'))
+            for x, char in enumerate(row)
+            if char != '.'
+        ]
+        if not cells:
+            return solution.strip()
+        return _canonical_from_cells(cells)
+    except Exception as e:
+        logger.error(f"Error normalizing solution: {str(e)}")
+        return solution.strip()
+
 def load_solutions(shape_id: str) -> Set[str]:
     solutions_file = os.path.join(os.path.dirname(__file__), 'solutions', f"{shape_id}_solutions.json")
     if not os.path.exists(solutions_file):
@@ -28,10 +113,11 @@ def load_solutions(shape_id: str) -> Set[str]:
             # If an entry is in the legacy multi-line format, normalize it
             if '\n' in entry:
                 norm = normalize_solution(entry, shape_id)
-                migrated_solutions.add(norm)
-                needs_rewrite = True
             else:
-                migrated_solutions.add(entry)
+                norm = canonicalize_string(entry)
+            if norm != entry:
+                needs_rewrite = True
+            migrated_solutions.add(norm)
 
         # Resave if legacy formats were updated
         if needs_rewrite:
@@ -104,44 +190,7 @@ def is_valid_placement(grid_state: str, shape_id: str) -> bool:
     except Exception as e:
         logger.error(f"Error validating grid state: {str(e)}")
         return False
-
-def normalize_solution(solution: str, shape_id: str) -> str:
-    """
-    Produce a deterministic canonical string.
-    For asymmetric target shapes, strips empty padding while preserving
-    fixed-frame voxel coordinates.
-    """
-    try:
-        layers = solution.strip().split('\n\n')
-        
-        # Parse into sorted coordinate tuples: (z, y, x, piece_char)
-        positions = [
-            (z, y, x, char)
-            for z, layer in enumerate(layers)
-            for y, row in enumerate(layer.split('\n'))
-            for x, char in enumerate(row)
-            if char != '.'
-        ]
-        
-        if not positions:
-            return solution.strip()
-
-        # Shift to base origin (0, 0, 0) preserving fixed orientation
-        min_z = min(z for z, y, x, _ in positions)
-        min_y = min(y for z, y, x, _ in positions)
-        min_x = min(x for z, y, x, _ in positions)
-
-        canonical_positions = sorted(
-            (z - min_z, y - min_y, x - min_x, char)
-            for z, y, x, char in positions
-        )
-
-        # Compact, deterministic string representation
-        return ";".join(f"{z},{y},{x}:{char}" for z, y, x, char in canonical_positions)
-
-    except Exception as e:
-        logger.error(f"Error normalizing solution: {str(e)}")
-        return solution.strip()
+    
 
 def handle_solution(shape_id: str, solution: str, check_only: bool = False) -> Tuple[bool, bool, Optional[str], int]:
     """Handle a solution: validate, normalize, and optionally save it.
