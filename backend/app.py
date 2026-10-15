@@ -57,6 +57,13 @@ def get_public_config():
 def serve_index():
     return send_from_directory(app.static_folder, 'index.html')
 
+@app.route('/auth/callback')
+def serve_auth_callback():
+    # Supabase sends people here from confirmation and password-reset emails,
+    # with the session tokens in the URL #fragment. Serve the normal app page;
+    # authController.js reads the fragment and finishes the flow.
+    return send_from_directory(app.static_folder, 'index.html')
+
 @app.route('/node_modules/<path:filename>')
 def serve_node_modules(filename):
     return send_from_directory('../node_modules', filename)
@@ -355,6 +362,10 @@ def whoami():
         return jsonify({"user_id": claims.get("sub"), "email": claims.get("email")})
     except Exception as e:
         return jsonify({"user_id": None, "error": str(e)}), 401
+    
+@app.route('/auth/callback')
+def auth_callback():
+    return send_from_directory(app.static_folder, 'index.html')
 
 if __name__ == '__main__':
     app.run(

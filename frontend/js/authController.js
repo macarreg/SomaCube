@@ -37,25 +37,30 @@ export class AuthController {
     async init(onChange) {
         this.onChange = onChange;
         this.supabase = await getSupabaseClient();
-
-        // Wire the UI before subscribing so no auth event can arrive early.
-        this._wireForm();
-        this._wireResetDialog();
-
-        // NOTE: don't await Supabase calls inside this callback (it can
-        // deadlock the client); it only touches the DOM and our own backend.
-        this.supabase.auth.onAuthStateChange((event, session) => {
+    
+        // Register BEFORE getSession so PASSWORD_RECOVERY isn't missed.
+        this.supabase.auth.onAuthStateChange(async (event, session) => {
             this.session = session;
             this._render();
             this._loadProfile();
             this.onChange?.();
-            if (event === 'PASSWORD_RECOVERY') this._openResetDialog();
+    
+            if (event === 'PASSWORD_RECOVERY') {
+                const pw = window.prompt('Enter your new password (min 6 characters):');
+                if (pw) {
+                    const { error } = await this.supabase.auth.updateUser({ password: pw });
+                    alert(error ? error.message : 'Password updated!');
+                }
+            }
         });
-
+    
         const { data: { session } } = await this.supabase.auth.getSession();
         this.session = session;
         this._render();
         this._loadProfile();
+    
+        this._wireForm();
+    }
 
         // PASSWORD_RECOVERY can fire while the client initialises, before the
         // listener above exists, so the URL fragment is the reliable signal.
