@@ -11,7 +11,7 @@ from utils import handle_solution, is_valid_placement, normalize_solution, VALID
 from hint_solver import compute_hint, get_next_hint_piece
 from config import Config
 from models import db, Solution, User, HintEvent
-from scoring import get_user_shape_stats, get_leaderboard, has_user_found_solution, get_user_solution_count, get_user_found_solutions
+from scoring import get_user_shape_stats, get_leaderboard, has_user_found_solution, get_user_solution_count, get_user_found_solutions, get_user_hints_used
 from sqlalchemy.exc import IntegrityError
 from auth import load_current_user, require_auth, _decode_token, check_email_exists
 from typing import Optional
@@ -186,24 +186,15 @@ def get_shape_solutions(shape_id):
     })
 
 def _record_hint(shape_id: str, piece_id: Optional[str]) -> Optional[int]:
-    """Atomically add 1 to the logged-in user's hint counter and log the
-    per-shape event. Returns the new total, or None for anonymous users,
-    an unknown figure, a missing users row, or a DB failure."""
+    """Log a hint event for the logged-in user. Returns their hint count for
+    this figure, or None for anonymous users, an unknown figure, or a DB failure."""
     if g.user_id is None or not is_known_shape(shape_id):
         return None
     try:
-        new_total = db.session.execute(
-            db.update(User)
-            .where(User.id == g.user_id)
-            .values(hints_used=User.hints_used + 1)
-            .returning(User.hints_used)
-            .execution_options(synchronize_session=False)
-        ).scalar_one_or_none()
-        if new_total is not None:
-            db.session.add(HintEvent(user_id=g.user_id, shape_id=shape_id,
-                                     piece_id=piece_id))
+        db.session.add(HintEvent(user_id=g.user_id, shape_id=shape_id,
+                                 piece_id=piece_id))
         db.session.commit()
-        return new_total
+        return get_user_hints_used(g.user_id, shape_id)
     except Exception as e:
         db.session.rollback()
         logger.error(f"Failed to record hint: {e}")

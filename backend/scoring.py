@@ -4,15 +4,16 @@ from models import db, Solution, User, HintEvent
 from totals import get_shape_total, get_shape_totals
 
 
-def get_user_hints_used(user_id) -> int:
-    return db.session.query(User.hints_used).filter(User.id == user_id).scalar() or 0
+def get_user_hints_used(user_id, shape_id) -> int:
+    """Hints this user has used on one figure."""
+    return HintEvent.query.filter_by(user_id=user_id, shape_id=shape_id).count()
 
 
 def get_user_shape_stats(user_id, shape_id):
     return {
         "solutions_found": Solution.query.filter_by(
             user_id=user_id, shape_id=shape_id).count(),
-        "hints_used": get_user_hints_used(user_id),   # total across all puzzles
+        "hints_used": get_user_hints_used(user_id, shape_id),   # this figure only
     }
 
 def get_user_solution_count(user_id, shape_id) -> int:
@@ -62,7 +63,12 @@ def _collect_total():
         shape_total = totals.get(sid)
         if shape_total and n >= shape_total:
             s["shapes_completed"] += 1
-    hints_by_user = dict(db.session.query(User.id, User.hints_used).all())
+    hints_by_user = dict(
+        db.session.query(HintEvent.user_id, func.count(HintEvent.id))
+        .filter(HintEvent.user_id.isnot(None))
+        .group_by(HintEvent.user_id)
+        .all()
+    )
     return stats, hints_by_user, None
 
 
