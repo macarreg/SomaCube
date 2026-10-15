@@ -64,7 +64,6 @@ export const SHAPE_IDS = [
     'big_3',
     'big_3_w_pips',
     'building',
-    'burr',
     'canal',
     'chair',
     'church',
@@ -86,7 +85,6 @@ export const SHAPE_IDS = [
     'double_tower_notch_cube',
     'duck',
     'duck_monument',
-    'eiffel', // NOT POSSIBLE
     'elephant',
     'fat_t',
     'fat_w_plus_3',
@@ -168,7 +166,6 @@ export const SHAPE_IDS = [
     '3_pin_cube',
     '3_slide_wall',
     '3s_2s_wall',
-    '3x3x3_wall',
     '3x3x3_wall_cpn',
     '3x4_3x5',
     '3x5_and_cpn',
